@@ -58,6 +58,7 @@ final class DecodeTests: XCTestCase {
         XCTAssertEqual(try decoder.decode(Data.self, from: Data(hex: "4401020304")), Data(hex: "01020304"))
         XCTAssertEqual(try decoder.decode(Data.self, from: Data(hex: "581a6162636465666768696a6b6c6d6e6f707172737475767778797a")), Data("abcdefghijklmnopqrstuvwxyz".utf8))
         XCTAssertEqual(try decoder.decode(Data.self, from: Data(hex: "5f6162636465666768696a6b6c6d6e6f707172737475767778797aff")), Data("abcdefghijklmnopqrstuvwxyz".utf8))
+        XCTAssertEqual(try decoder.decode(Data.self, from: Data(hex: "7818e38193e38293e381abe381a1e381afe38081e4b896e7958c")), Data("こんにちは、世界".utf8))
     }
 
     func testInt() throws {

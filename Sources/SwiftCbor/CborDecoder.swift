@@ -308,7 +308,7 @@ extension _CborDecoder {
 
     func unwrapData() throws -> Data {
         switch value {
-        case let .literal(.bin(v)) /* , let .literal(.str(v))*/:
+        case let .literal(.bin(v)), let .literal(.str(v)):
             v
         default:
             throw DecodingError.typeMismatch(Data.self, DecodingError.Context(codingPath: codingPath, debugDescription: ""))
