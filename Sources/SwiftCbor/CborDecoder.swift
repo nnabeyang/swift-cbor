@@ -12,7 +12,7 @@ open class CborDecoder {
     public init() {}
     open func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         let scanner = CborScanner(data: data)
-        let value = try scanner.scan()
+        let value = scanner.scan()
         let decoder: _CborDecoder = .init(from: value)
         do {
             return try decoder.unwrap(as: T.self)
