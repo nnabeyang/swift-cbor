@@ -23,31 +23,9 @@ extension CborValueLiteralType {
         case .bool:
             "bool"
         case let .int(_, type):
-            switch type {
-            case _ as Int8.Type:
-                "int8"
-            case _ as Int16.Type:
-                "int16"
-            case _ as Int32.Type:
-                "int32"
-            case _ as Int64.Type:
-                "int64"
-            default:
-                fatalError()
-            }
+            String(describing: type).lowercased()
         case let .uint(_, type):
-            switch type {
-            case _ as UInt8.Type:
-                "uint8"
-            case _ as UInt16.Type:
-                "uint16"
-            case _ as UInt32.Type:
-                "uint32"
-            case _ as UInt64.Type:
-                "uint64"
-            default:
-                fatalError()
-            }
+            String(describing: type).lowercased()
         case .float16:
             "float16"
         case .float32:
