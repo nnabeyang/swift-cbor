@@ -64,11 +64,21 @@ private class _CborDecoder: Decoder {
 }
 
 private extension _CborDecoder {
-    func unbox(_ value: CborValue, as type: Bool.Type) throws -> Bool? {
+    @inline(__always)
+    func checkNotNull<T>(_ type: CborValueLiteralType, expectedType: T.Type) throws {
+        if case .nil = type {
+            throw DecodingError.valueNotFound(expectedType, DecodingError.Context(
+                codingPath: codingPath,
+                debugDescription: "Cannot get value of type \(expectedType) -- found null value instead"
+            ))
+        }
+    }
+
+    func unbox(_ value: CborValue, as type: Bool.Type) throws -> Bool {
         if case let .literal(value) = value {
+            try checkNotNull(value, expectedType: type)
             switch value {
             case let .bool(v): return v
-            case .nil: return nil
             default:
                 break
             }
@@ -79,13 +89,12 @@ private extension _CborDecoder {
         ))
     }
 
-    func unbox(_ value: CborValue, as type: String.Type) throws -> String? {
+    func unbox(_ value: CborValue, as type: String.Type) throws -> String {
         if case let .literal(value) = value {
+            try checkNotNull(value, expectedType: type)
             switch value {
             case let .str(v):
-                return String(data: v, encoding: .utf8)
-            case .nil:
-                return nil
+                return String(decoding: v, as: UTF8.self)
             default:
                 break
             }
@@ -96,8 +105,9 @@ private extension _CborDecoder {
         ))
     }
 
-    func unboxFloat<T: BinaryFloatingPoint & DataNumber>(_ value: CborValue, as type: T.Type) throws -> T? {
+    func unboxFloat<T: BinaryFloatingPoint & DataNumber>(_ value: CborValue, as type: T.Type) throws -> T {
         if case let .literal(f) = value {
+            try checkNotNull(f, expectedType: type)
             switch f {
             case let .float16(v):
                 return try T(Float16(data: v))
@@ -105,8 +115,6 @@ private extension _CborDecoder {
                 return try T(Float(data: v))
             case let .float64(v):
                 return try T(Double(data: v))
-            case .nil:
-                return nil
             default:
                 break
             }
@@ -372,19 +380,19 @@ private struct _CborSingleValueDecodingContainer: SingleValueDecodingContainer {
     }
 
     func decode(_: Bool.Type) throws -> Bool {
-        try decoder.unbox(value, as: Bool.self)!
+        try decoder.unbox(value, as: Bool.self)
     }
 
     func decode(_ type: String.Type) throws -> String {
-        try decoder.unbox(value, as: type)!
+        try decoder.unbox(value, as: type)
     }
 
     func decode(_ type: Double.Type) throws -> Double {
-        try decoder.unboxFloat(value, as: type)!
+        try decoder.unboxFloat(value, as: type)
     }
 
     func decode(_ type: Float.Type) throws -> Float {
-        try decoder.unboxFloat(value, as: type)!
+        try decoder.unboxFloat(value, as: type)
     }
 
     func decode(_: Int.Type) throws -> Int {
@@ -485,13 +493,13 @@ private struct CborUnkeyedUnkeyedDecodingContainer: UnkeyedDecodingContainer {
     mutating func decode(_: Bool.Type) throws -> Bool {
         let value = try getNextValue(ofType: String.self)
         currentIndex += 1
-        return try decoder.unbox(value, as: Bool.self)!
+        return try decoder.unbox(value, as: Bool.self)
     }
 
     mutating func decode(_: String.Type) throws -> String {
         let value = try getNextValue(ofType: String.self)
         currentIndex += 1
-        return try decoder.unbox(value, as: String.self)!
+        return try decoder.unbox(value, as: String.self)
     }
 
     mutating func decode(_: Double.Type) throws -> Double {
@@ -669,7 +677,7 @@ private struct CborUnkeyedUnkeyedDecodingContainer: UnkeyedDecodingContainer {
     @inline(__always)
     private mutating func decodeFloat<T: BinaryFloatingPoint & DataNumber>(as _: T.Type) throws -> T {
         let value = try getNextValue(ofType: T.self)
-        let result = try decoder.unboxFloat(value, as: T.self)!
+        let result = try decoder.unboxFloat(value, as: T.self)
         currentIndex += 1
         return result
     }
@@ -723,12 +731,12 @@ private struct CborKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
 
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
         let value = try getValue(forKey: key)
-        return try decoder.unbox(value, as: type)!
+        return try decoder.unbox(value, as: type)
     }
 
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
         let value = try getValue(forKey: key)
-        return try decoder.unbox(value, as: type)!
+        return try decoder.unbox(value, as: type)
     }
 
     func decode(_: Double.Type, forKey key: Key) throws -> Double {
@@ -825,7 +833,7 @@ private struct CborKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
     @inline(__always)
     private func decodeFloat<T: BinaryFloatingPoint & DataNumber>(key: K) throws -> T {
         let value = try getValue(forKey: key)
-        return try decoder.unboxFloat(value, as: T.self)!
+        return try decoder.unboxFloat(value, as: T.self)
     }
 
     @inline(__always)
