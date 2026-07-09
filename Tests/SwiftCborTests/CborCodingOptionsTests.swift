@@ -515,4 +515,76 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertThrowsError(try encoder.encode(Double.nan))
     XCTAssertThrowsError(try encoder.encode(Double.infinity))
   }
+
+  func testAllowedTagsRestrictsTagsSymmetrically() throws {
+    let valid = TestTaggedValue(tag: 42, payload: .bytes(Data([0, 1, 2])))
+    let encoder = CborEncoder(allowedTags: [42])
+    let data = try encoder.encode(valid)
+    XCTAssertEqual(data.hexDescription, "d82a43000102")
+
+    let decoder = CborDecoder(allowedTags: [42])
+    XCTAssertNoThrow(try decoder.decode(TestBytesLink.self, from: data))
+
+    XCTAssertThrowsError(try encoder.encode(TestTaggedValue(tag: 1, payload: .integer(0))))
+    XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "c100")))
+  }
+
+  func testAllowedTagsDefaultAllowsAnyTag() throws {
+    let data = try CborEncoder().encode(TestTaggedValue(tag: 99, payload: .integer(0)))
+    XCTAssertEqual(data.hexDescription, "d86300")
+    XCTAssertNoThrow(try CborDecoder().decode(TestBytesLink.self, from: Data(hex: "d82a43000102")))
+  }
+
+  func testAllowedTagsEmptySetRejectsAllTaggedValues() {
+    let encoder = CborEncoder(allowedTags: [])
+    XCTAssertThrowsError(try encoder.encode(TestTaggedValue(tag: 42, payload: .integer(0))))
+
+    let decoder = CborDecoder(allowedTags: [])
+    XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a43000102")))
+  }
+
+  func testDagCborAllowedTagsPresetIsTag42() {
+    XCTAssertEqual(CborDecoder.dagCborAllowedTags, [42])
+    XCTAssertEqual(CborEncoder.dagCborAllowedTags, [42])
+  }
+
+  func testCborCodableTypeValidatesItsOwnPayload() {
+    let decoder = CborDecoder(allowedTags: [42])
+    XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a01")))
+    XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a4101")))
+  }
+}
+
+private struct TestTaggedValue: CborEncodable {
+  enum Payload {
+    case integer(Int)
+    case bytes(Data)
+  }
+  let tag: UInt64
+  let payload: Payload
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    switch payload {
+    case .integer(let value): try container.encode(value)
+    case .bytes(let value): try container.encode(value)
+    }
+  }
+}
+
+private struct TestBytesLink: CborDecodable {
+  let bytes: Data
+  var tag: UInt64 { 42 }
+
+  init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(Data.self)
+    guard raw.first == 0 else {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: decoder.codingPath,
+          debugDescription: "DAG-CBOR link payload must start with 0x00."
+        ))
+    }
+    bytes = raw
+  }
 }

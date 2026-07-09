@@ -6,9 +6,13 @@ extension Dictionary: _CborDictionaryEncodableMarker where Key: Encodable, Value
 
 open class CborEncoder {
   public var options: Options
+  public var allowedTags: Set<UInt64>?
 
-  public init(options: Options = []) {
+  public static let dagCborAllowedTags: Set<UInt64> = [42]
+
+  public init(options: Options = [], allowedTags: Set<UInt64>? = nil) {
     self.options = options
+    self.allowedTags = allowedTags
   }
 
   open func encode(_ value: some Encodable) throws -> Data {
@@ -30,7 +34,7 @@ open class CborEncoder {
   }
 
   func encodeAsCborValue<T: Encodable>(_ value: T) throws -> CborEncodedValue {
-    let encoder = _CborEncoder(codingPath: [], options: options)
+    let encoder = _CborEncoder(codingPath: [], options: options, allowedTags: allowedTags)
     guard let result = try encoder.wrapEncodable(value, for: CodingKey?.none) else {
       throw EncodingError.invalidValue(
         value,
@@ -45,10 +49,14 @@ private class _CborEncoder: Encoder {
   public var codingPath: [CodingKey] = []
   public var userInfo: [CodingUserInfoKey: Any] = [:]
   let options: CborEncoder.Options
+  let allowedTags: Set<UInt64>?
 
-  init(codingPath: [CodingKey], options: CborEncoder.Options) {
+  init(
+    codingPath: [CodingKey], options: CborEncoder.Options, allowedTags: Set<UInt64>? = nil
+  ) {
     self.codingPath = codingPath
     self.options = options
+    self.allowedTags = allowedTags
   }
 
   var singleValue: CborEncodedValue?
@@ -496,17 +504,26 @@ extension _SpecialTreatmentEncoder {
   fileprivate func wrapCborEncodable(_ encodable: CborEncodable, for additionalKey: CodingKey?)
     throws -> CborEncodedValue?
   {
+    if let allowedTags = encoder.allowedTags, !allowedTags.contains(encodable.tag) {
+      throw EncodingError.invalidValue(
+        encodable,
+        .init(
+          codingPath: codingPath,
+          debugDescription: "CBOR tag \(encodable.tag) is not in the allowed tag set."
+        ))
+    }
     let tag = try encoder.wrapUInt(encodable.tag, majorType: 0b1100_0000, for: additionalKey)
-    let encoder = getEncoder(for: additionalKey)
-    try encodable.encode(to: encoder)
-    guard let value = encoder.value else { return nil }
+    let subEncoder = getEncoder(for: additionalKey)
+    try encodable.encode(to: subEncoder)
+    guard let value = subEncoder.value else { return nil }
     return .tagged(tag: tag, value: value)
   }
 
   fileprivate func getEncoder(for additionalKey: CodingKey?) -> _CborEncoder {
     if let additionalKey {
       let newCodidngPath: [CodingKey] = codingPath + [additionalKey]
-      return _CborEncoder(codingPath: newCodidngPath, options: encoder.options)
+      return _CborEncoder(
+        codingPath: newCodidngPath, options: encoder.options, allowedTags: encoder.allowedTags)
     }
     return encoder
   }
