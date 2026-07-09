@@ -58,7 +58,15 @@ class CborScanner {
   }
 
   private func scanString(additional: UInt8) throws -> CborValue {
-    try .literal(.str(scanSequence(additional: additional)))
+    let bytes = try scanSequence(additional: additional)
+    if options.contains(.validUTF8Only), String(data: bytes, encoding: .utf8) == nil {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription: "CBOR text string is not valid UTF-8."
+        ))
+    }
+    return .literal(.str(bytes))
   }
 
   private func scanSequence(additional c: UInt8) throws -> Data {

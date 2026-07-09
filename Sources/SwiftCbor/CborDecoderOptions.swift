@@ -14,6 +14,7 @@ extension CborDecoder {
     public static let basicSimpleValuesOnly = Options(rawValue: 1 << 5)
     public static let finiteFloatingPointValuesOnly = Options(rawValue: 1 << 6)
     public static let floatingPoint64Only = Options(rawValue: 1 << 7)
+    public static let validUTF8Only = Options(rawValue: 1 << 8)
 
     var hasConflictingFloatingPointOptions: Bool {
       contains(.shortestFloatingPointEncoding) && contains(.floatingPoint64Only)
