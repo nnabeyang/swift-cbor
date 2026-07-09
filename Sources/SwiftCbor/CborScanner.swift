@@ -5,6 +5,7 @@ class CborScanner {
   private var off: Int
   let options: CborDecoder.Options
   let allowedTags: Set<UInt64>?
+  var isAtEnd: Bool { off == data.endIndex }
 
   init(
     data: Data, options: CborDecoder.Options = [], allowedTags: Set<UInt64>? = nil

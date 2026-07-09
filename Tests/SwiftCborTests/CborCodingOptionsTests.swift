@@ -563,6 +563,44 @@ final class CborCodingOptionsTests: XCTestCase {
     let decoder = CborDecoder(options: .validUTF8Only)
     XCTAssertEqual(try decoder.decode(String.self, from: Data(hex: "63e38182")), "あ")
   }
+
+  func testSingleTopLevelItemRejectsTrailingData() {
+    let decoder = CborDecoder(options: .singleTopLevelItem)
+    XCTAssertThrowsError(try decoder.decode(Int.self, from: Data(hex: "0102")))
+    XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "810102")))
+  }
+
+  func testSingleTopLevelItemAcceptsFullyConsumedInput() throws {
+    let decoder = CborDecoder(options: .singleTopLevelItem)
+    XCTAssertEqual(try decoder.decode([Int].self, from: Data(hex: "8101")), [1])
+  }
+
+  func testSingleTopLevelItemAcceptsFullyConsumedDataSlice() throws {
+    let decoder = CborDecoder(options: .singleTopLevelItem)
+    let slice = Data(hex: "008101").dropFirst()
+    XCTAssertEqual(try decoder.decode([Int].self, from: slice), [1])
+  }
+
+  func testSingleTopLevelItemRejectsTrailingDataInDataSlice() {
+    let decoder = CborDecoder(options: .singleTopLevelItem)
+    let slice = Data(hex: "0081010203").dropFirst()
+    XCTAssertThrowsError(try decoder.decode([Int].self, from: slice))
+  }
+
+  func testSingleTopLevelItemRejectsTrailingDataAfterMap() {
+    let decoder = CborDecoder(options: .singleTopLevelItem)
+    XCTAssertThrowsError(try decoder.decode([String: Int].self, from: Data(hex: "a1616101ff")))
+  }
+
+  func testSingleTopLevelItemRejectsTrailingDataAfterTaggedValue() {
+    let decoder = CborDecoder(options: .singleTopLevelItem, allowedTags: [42])
+    XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a4100ff")))
+  }
+
+  func testSingleTopLevelItemRejectsTrailingDataAfterIndefiniteArray() {
+    let decoder = CborDecoder(options: .singleTopLevelItem)
+    XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "9f01ff00")))
+  }
 }
 
 private struct TestTaggedValue: CborEncodable {
