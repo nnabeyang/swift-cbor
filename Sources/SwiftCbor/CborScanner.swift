@@ -90,12 +90,14 @@ class CborScanner {
       return .literal(.simple(value))
     case 0x19:
       let bytes = read(1 << 1)
+      if options.contains(.floatingPoint64Only) { throw requireFloat64Error() }
       if options.contains(.finiteFloatingPointValuesOnly), try !Float16(data: bytes).isFinite {
         throw nonFiniteFloatError()
       }
       return .literal(.float16(bytes))
     case 0x1A:
       let bytes = read(1 << 2)
+      if options.contains(.floatingPoint64Only) { throw requireFloat64Error() }
       if options.contains(.finiteFloatingPointValuesOnly), try !Float(data: bytes).isFinite {
         throw nonFiniteFloatError()
       }
@@ -136,6 +138,14 @@ class CborScanner {
       .init(
         codingPath: [],
         debugDescription: "Non-finite floating-point values are not permitted."
+      ))
+  }
+
+  private func requireFloat64Error() -> DecodingError {
+    DecodingError.dataCorrupted(
+      .init(
+        codingPath: [],
+        debugDescription: "Floating-point values must use the 64-bit representation."
       ))
   }
 

@@ -461,4 +461,58 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertEqual(try encoder.encode(Double(1.5)).hexDescription, "f93e00")
     XCTAssertThrowsError(try encoder.encode(Double.nan))
   }
+
+  func testFloatingPoint64OnlyAlwaysEncodesAsDouble() throws {
+    let encoder = CborEncoder(options: .floatingPoint64Only)
+    XCTAssertEqual(try encoder.encode(Float16(1.5)).hexDescription, "fb3ff8000000000000")
+    XCTAssertEqual(try encoder.encode(Float(1.5)).hexDescription, "fb3ff8000000000000")
+    XCTAssertEqual(try encoder.encode(Double(1.5)).hexDescription, "fb3ff8000000000000")
+  }
+
+  func testFloatingPoint64OnlyRejectsNarrowerInput() throws {
+    let decoder = CborDecoder(options: .floatingPoint64Only)
+    XCTAssertThrowsError(try decoder.decode(Float.self, from: Data(hex: "f93e00")))
+    XCTAssertThrowsError(try decoder.decode(Float.self, from: Data(hex: "fa3fc00000")))
+    XCTAssertEqual(try decoder.decode(Double.self, from: Data(hex: "fb3ff8000000000000")), 1.5)
+  }
+
+  func testFloatingPointEncodingOptionsConflict() {
+    let encodingOptions: CborEncoder.Options = [
+      .shortestFloatingPointEncoding, .floatingPoint64Only,
+    ]
+    XCTAssertThrowsError(try CborEncoder(options: encodingOptions).encode(1.5))
+
+    let decodingOptions: CborDecoder.Options = [
+      .shortestFloatingPointEncoding, .floatingPoint64Only,
+    ]
+    XCTAssertThrowsError(
+      try CborDecoder(options: decodingOptions).decode(
+        Double.self, from: Data(hex: "fb3ff8000000000000")))
+  }
+
+  func testFloatingPoint64OnlyRoundtripsBitIdentically() throws {
+    let encoder = CborEncoder(options: .floatingPoint64Only)
+    let decoder = CborDecoder(options: .floatingPoint64Only)
+    for value in [1.5, -0.0, Double.leastNonzeroMagnitude, Double.greatestFiniteMagnitude] {
+      let data = try encoder.encode(value)
+      XCTAssertEqual(data.first, 0xFB)
+      XCTAssertEqual(data.count, 9)
+      XCTAssertEqual(try decoder.decode(Double.self, from: data), value)
+    }
+  }
+
+  func testFloatingPoint64OnlyEncodesNonFiniteAsFloat64() throws {
+    let encoder = CborEncoder(options: .floatingPoint64Only)
+    XCTAssertEqual(try encoder.encode(Double.infinity).hexDescription, "fb7ff0000000000000")
+    XCTAssertEqual(try encoder.encode(-Double.infinity).hexDescription, "fbfff0000000000000")
+    XCTAssertEqual(try encoder.encode(Float16.infinity).hexDescription, "fb7ff0000000000000")
+  }
+
+  func testFloatingPoint64OnlyCombinesWithFiniteFloatingPointValuesOnly() throws {
+    let encoder = CborEncoder(
+      options: [.floatingPoint64Only, .finiteFloatingPointValuesOnly])
+    XCTAssertEqual(try encoder.encode(Double(1.5)).hexDescription, "fb3ff8000000000000")
+    XCTAssertThrowsError(try encoder.encode(Double.nan))
+    XCTAssertThrowsError(try encoder.encode(Double.infinity))
+  }
 }
