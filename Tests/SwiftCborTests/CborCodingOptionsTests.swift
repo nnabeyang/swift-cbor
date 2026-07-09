@@ -61,6 +61,21 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertEqual(try CborDecoder().decode(UInt8.self, from: Data(hex: "1817")), 23)
   }
 
+  func testDeterministicCborRejectsNonMinimalArgumentsForEveryApplicableMajorType() {
+    for hex in [
+      "1817",  // unsigned integer
+      "3817",  // negative integer
+      "5800",  // byte string length
+      "7800",  // text string length
+      "9800",  // array length
+      "b800",  // map length
+      "d80000",  // tag number
+    ] {
+      XCTAssertThrowsError(
+        try CborScanner(data: Data(hex: hex), options: .deterministicCbor).scan(), hex)
+    }
+  }
+
   func testDefiniteLengthItemsRejectsIndefiniteArray() {
     let decoder = CborDecoder(options: .definiteLengthItems)
     XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "9f0102ff")))
@@ -73,6 +88,68 @@ final class CborCodingOptionsTests: XCTestCase {
 
   func testDefaultDecoderAcceptsIndefiniteArray() throws {
     XCTAssertEqual(try CborDecoder().decode([Int].self, from: Data(hex: "9f0102ff")), [1, 2])
+  }
+
+  func testDeterministicCborRejectsEveryIndefiniteLengthItem() {
+    for hex in [
+      "5fff",  // byte string
+      "7fff",  // text string
+      "9fff",  // array
+      "bfff",  // map
+      "819fff",  // nested array
+    ] {
+      XCTAssertThrowsError(
+        try CborScanner(data: Data(hex: hex), options: .deterministicCbor).scan(), hex)
+    }
+  }
+
+  func testLexicographicallySortedMapKeysRejectsUnsortedMapsRecursively() throws {
+    let decoder = CborDecoder(options: .lexicographicallySortedMapKeys)
+
+    XCTAssertThrowsError(
+      try decoder.decode([String: Int].self, from: Data(hex: "a2616201616102")))
+    XCTAssertThrowsError(
+      try decoder.decode([String: [String: Int]].self, from: Data(hex: "a16161a2616201616102")))
+    XCTAssertThrowsError(
+      try decoder.decode([String: Int].self, from: Data(hex: "bf616201616102ff")))
+  }
+
+  func testLexicographicallySortedMapKeysAllowsSortedKeys() throws {
+    let options = CborDecoder.Options.lexicographicallySortedMapKeys
+
+    XCTAssertNoThrow(
+      try CborDecoder(options: options).decode(
+        [String: Int].self, from: Data(hex: "a2616101616202")))
+  }
+
+  func testLexicographicallySortedMapKeysDoesNotValidateDuplicateKeys() throws {
+    let options = CborDecoder.Options.lexicographicallySortedMapKeys
+
+    XCTAssertNoThrow(try CborScanner(data: Data(hex: "a2616101616102"), options: options).scan())
+  }
+
+  func testDeterministicCborUsesRfc8949BytewiseMapKeyOrder() throws {
+    let coreOrder = Data(
+      hex: "a80af61864f620f6617af6626161f6811864f68120f6f4f6")
+    let lengthFirstOrder = Data(
+      hex: "a80af620f6f4f61864f6617af68120f6626161f6811864f6")
+
+    XCTAssertNoThrow(try CborScanner(data: coreOrder, options: .deterministicCbor).scan())
+    XCTAssertThrowsError(
+      try CborScanner(data: lengthFirstOrder, options: .deterministicCbor).scan())
+  }
+
+  func testDeterministicCborValidatesMapOrderWithinCompositeKeys() {
+    XCTAssertThrowsError(
+      try CborScanner(
+        data: Data(hex: "a1a261620061610000"), options: .deterministicCbor
+      ).scan())
+  }
+
+  func testDefaultDecoderAcceptsUnsortedMapKeys() throws {
+    XCTAssertEqual(
+      try CborDecoder().decode([String: Int].self, from: Data(hex: "a2616201616102")),
+      ["a": 2, "b": 1])
   }
 
   func testLexicographicallySortedMapKeysSortsRecursively() throws {
@@ -200,6 +277,69 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertEqual(try encoder.encode(Double(1.5)).hexDescription, "fb3ff8000000000000")
   }
 
+  func testShortestFloatingPointDecodingRejectsValuesThatCanNarrow() {
+    let decoder = CborDecoder(options: .shortestFloatingPointEncoding)
+
+    for hex in [
+      "fa3fc00000",  // 1.5 as Float32
+      "fb3ff8000000000000",  // 1.5 as Float64
+      "fa00000000",  // positive zero as Float32
+      "fa7f800000",  // infinity as Float32
+      "fb0000000000000000",  // positive zero as Float64
+      "fb8000000000000000",  // negative zero as Float64
+      "fb7ff0000000000000",  // infinity as Float64
+      "fbfff0000000000000",  // -infinity as Float64
+      "fa80000000",  // negative zero as Float32
+      "fa33800000",  // the smallest Float16 subnormal as Float32
+      "fb36a0000000000000",  // the smallest Float32 subnormal as Float64
+      "fa7fc02000",  // NaN with a payload that fits in Float16
+      "faffc02000",  // negative NaN with a payload that fits in Float16
+      "fb7ff8000020000000",  // NaN with a payload that fits in Float32
+    ] {
+      XCTAssertThrowsError(try decoder.decode(Double.self, from: Data(hex: hex)), hex)
+    }
+  }
+
+  func testShortestFloatingPointDecodingAcceptsValuesThatCannotNarrow() throws {
+    let decoder = CborDecoder(options: .shortestFloatingPointEncoding)
+
+    XCTAssertEqual(
+      try decoder.decode(Float.self, from: Data(hex: "fa3f8ccccd")),
+      Float(bitPattern: 0x3F8C_CCCD))
+    XCTAssertEqual(
+      try decoder.decode(Double.self, from: Data(hex: "fb3ff199999999999a")), 1.1)
+    XCTAssertEqual(
+      try decoder.decode(Float.self, from: Data(hex: "fa00000001")).bitPattern, 1)
+    XCTAssertEqual(
+      try decoder.decode(Double.self, from: Data(hex: "fb0000000000000001")).bitPattern, 1)
+    XCTAssertTrue(
+      try decoder.decode(Float.self, from: Data(hex: "faffc12345")).isNaN)
+    XCTAssertTrue(
+      try decoder.decode(Float.self, from: Data(hex: "fa7f800001")).isNaN)
+    XCTAssertTrue(
+      try decoder.decode(Double.self, from: Data(hex: "fb7ff8000000000001")).isNaN)
+    XCTAssertTrue(
+      try decoder.decode(Double.self, from: Data(hex: "fb7ff0000000000001")).isNaN)
+  }
+
+  func testShortestFloatingPointDecodingAcceptsEveryFloat16BitPattern() throws {
+    let options = CborDecoder.Options.shortestFloatingPointEncoding
+
+    for bitPattern in UInt16.min...UInt16.max {
+      let data = Data([
+        0xF9,
+        UInt8(truncatingIfNeeded: bitPattern >> 8),
+        UInt8(truncatingIfNeeded: bitPattern),
+      ])
+      XCTAssertNoThrow(try CborScanner(data: data, options: options).scan())
+    }
+  }
+
+  func testDefaultDecoderAcceptsNonShortestFloatingPointEncoding() throws {
+    XCTAssertEqual(
+      try CborDecoder().decode(Double.self, from: Data(hex: "fb3ff8000000000000")), 1.5)
+  }
+
   func testShortestFloatingPointEncodingCombinesWithRecursiveMapSorting() throws {
     let options: CborEncoder.Options = [
       .lexicographicallySortedMapKeys,
@@ -213,5 +353,32 @@ final class CborCodingOptionsTests: XCTestCase {
         "a": [Double(1.5)],
       ]).hexDescription,
       "a2616181f93e00616281f94000")
+  }
+
+  func testDeterministicCborContainsCoreOptions() {
+    XCTAssertTrue(CborEncoder.Options.deterministicCbor.contains(.lexicographicallySortedMapKeys))
+    XCTAssertTrue(CborEncoder.Options.deterministicCbor.contains(.shortestFloatingPointEncoding))
+    XCTAssertTrue(CborDecoder.Options.deterministicCbor.contains(.minimalArgumentEncoding))
+    XCTAssertTrue(CborDecoder.Options.deterministicCbor.contains(.definiteLengthItems))
+    XCTAssertTrue(
+      CborDecoder.Options.deterministicCbor.contains(.lexicographicallySortedMapKeys))
+    XCTAssertTrue(
+      CborDecoder.Options.deterministicCbor.contains(.shortestFloatingPointEncoding))
+  }
+
+  func testDeterministicCborIntegratesCoreRules() throws {
+    let encoder = CborEncoder(options: .deterministicCbor)
+    let input = ["b": 2.0, "a": 1.5]
+    let encoded = try encoder.encode(input)
+    XCTAssertEqual(
+      encoded.hexDescription, "a26161f93e006162f94000")
+
+    let decoder = CborDecoder(options: .deterministicCbor)
+    XCTAssertEqual(try decoder.decode([String: Double].self, from: encoded), input)
+    XCTAssertThrowsError(try decoder.decode(UInt8.self, from: Data(hex: "1817")))
+    XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "9f01ff")))
+    XCTAssertThrowsError(
+      try decoder.decode([String: Int].self, from: Data(hex: "a2616201616102")))
+    XCTAssertThrowsError(try decoder.decode(Double.self, from: Data(hex: "fa3fc00000")))
   }
 }
