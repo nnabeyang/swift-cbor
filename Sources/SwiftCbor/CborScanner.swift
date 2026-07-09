@@ -138,9 +138,17 @@ class CborScanner {
       a.reserveCapacity(n)
       for _ in 0..<n {
         let keyStart = off
-        try a.append(scan())
+        let key = try scan()
         try requireLexicographicallySortedMapKey(
           data[keyStart..<off], after: &previousKeyEncoding)
+        if options.contains(.stringMapKeysOnly), !key.isTextString {
+          throw DecodingError.dataCorrupted(
+            .init(
+              codingPath: [],
+              debugDescription: "CBOR map keys must be text strings."
+            ))
+        }
+        a.append(key)
         try a.append(scan())
       }
     } else {
@@ -153,6 +161,13 @@ class CborScanner {
         }
         try requireLexicographicallySortedMapKey(
           data[keyStart..<off], after: &previousKeyEncoding)
+        if options.contains(.stringMapKeysOnly), !k.isTextString {
+          throw DecodingError.dataCorrupted(
+            .init(
+              codingPath: [],
+              debugDescription: "CBOR map keys must be text strings."
+            ))
+        }
         let v = try scan()
         if case .literal(.break) = k {
           break
@@ -300,5 +315,12 @@ class CborScanner {
     } else {
       return .end
     }
+  }
+}
+
+extension CborValue {
+  fileprivate var isTextString: Bool {
+    if case .literal(.str) = self { return true }
+    return false
   }
 }

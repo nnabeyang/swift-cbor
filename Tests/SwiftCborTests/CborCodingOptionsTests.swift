@@ -381,4 +381,14 @@ final class CborCodingOptionsTests: XCTestCase {
       try decoder.decode([String: Int].self, from: Data(hex: "a2616201616102")))
     XCTAssertThrowsError(try decoder.decode(Double.self, from: Data(hex: "fa3fc00000")))
   }
+
+  func testStringMapKeysOnlyRejectsOtherKeyTypes() {
+    let decoder = CborDecoder(options: .stringMapKeysOnly)
+    XCTAssertThrowsError(try decoder.decode([String: Int].self, from: Data(hex: "a10102")))
+  }
+
+  func testStringMapKeysOnlyAcceptsTextKeys() throws {
+    let decoder = CborDecoder(options: .stringMapKeysOnly)
+    XCTAssertEqual(try decoder.decode([String: Int].self, from: Data(hex: "a1616101")), ["a": 1])
+  }
 }
