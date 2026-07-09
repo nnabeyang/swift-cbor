@@ -4,6 +4,7 @@ import XCTest
 
 final class CborCodingOptionsTests: XCTestCase {
   func testOptionsDefaultToEmpty() {
+    XCTAssertEqual(CborEncoder().options, [])
     XCTAssertEqual(CborDecoder().options, [])
   }
 
@@ -72,5 +73,58 @@ final class CborCodingOptionsTests: XCTestCase {
 
   func testDefaultDecoderAcceptsIndefiniteArray() throws {
     XCTAssertEqual(try CborDecoder().decode([Int].self, from: Data(hex: "9f0102ff")), [1, 2])
+  }
+
+  func testLexicographicallySortedMapKeysSortsRecursively() throws {
+    let encoder = CborEncoder(options: .lexicographicallySortedMapKeys)
+    let input = [
+      "aa": ["d": 4, "c": 3],
+      "b": ["f": 6, "e": 5],
+    ]
+    let data = try encoder.encode(input)
+
+    XCTAssertEqual(
+      data.hexDescription,
+      "a26162a2616505616606626161a2616303616404")
+    XCTAssertEqual(try CborDecoder().decode([String: [String: Int]].self, from: data), input)
+  }
+
+  func testLexicographicallySortedMapKeysHandlesEmptyAndSingleEntryMaps() throws {
+    let encoder = CborEncoder(options: .lexicographicallySortedMapKeys)
+
+    XCTAssertEqual(try encoder.encode([String: Int]()).hexDescription, "a0")
+    XCTAssertEqual(try encoder.encode(["x": 1]).hexDescription, "a1617801")
+  }
+
+  func testLexicographicallySortedMapKeysUsesRfc8949BytewiseOrder() {
+    let null = CborEncodedValue.literal([0xF6])
+    let value = CborEncodedValue.map([
+      .literal([0xF4]), null,
+      .array([.literal([0x20])]), null,
+      .literal([0x62, 0x61, 0x61]), null,
+      .literal([0x18, 0x64]), null,
+      .array([.literal([0x18, 0x64])]), null,
+      .literal([0x61, 0x7A]), null,
+      .literal([0x20]), null,
+      .literal([0x0A]), null,
+    ])
+    let writer = CborValue.Writer(sortMapKeysLexicographically: true)
+
+    XCTAssertEqual(
+      Data(writer.writeValue(value)).hexDescription,
+      "a80af61864f620f6617af6626161f6811864f68120f6f4f6")
+  }
+
+  func testLexicographicallySortedMapKeysSortsMapsWithinCompositeKeys() {
+    let value = CborEncodedValue.map([
+      .map([
+        .literal([0x61, 0x62]), .literal([0x02]),
+        .literal([0x61, 0x61]), .literal([0x01]),
+      ]),
+      .literal([0x00]),
+    ])
+    let writer = CborValue.Writer(sortMapKeysLexicographically: true)
+
+    XCTAssertEqual(Data(writer.writeValue(value)).hexDescription, "a1a261610161620200")
   }
 }
