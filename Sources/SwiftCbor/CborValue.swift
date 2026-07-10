@@ -40,7 +40,7 @@ extension CborValueLiteralType {
     }
 }
 
-indirect enum CborEncodedValue {
+indirect enum CborEncodedValue: Sendable {
     case none
     case literal([UInt8])
     case array([CborEncodedValue])
@@ -87,8 +87,6 @@ indirect enum CborValue {
     case array([CborValue])
     case map([CborValue])
     case tagged(tag: CborValueLiteralType, value: CborValue)
-
-    static let `break`: CborValue = .literal(.break)
 }
 
 extension CborValue {
