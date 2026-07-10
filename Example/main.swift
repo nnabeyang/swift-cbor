@@ -1,23 +1,23 @@
 import SwiftCbor
 
 struct Coordinate: Codable {
-    let latitude: Double
-    let longitude: Double
+  let latitude: Double
+  let longitude: Double
 }
 
 struct Landmark: Codable {
-    let name: String
-    let foundingYear: Int
-    let location: Coordinate
+  let name: String
+  let foundingYear: Int
+  let location: Coordinate
 }
 
 let input = Landmark(
-    name: "Mojave Desert",
-    foundingYear: 0,
-    location: Coordinate(
-        latitude: 35.0110079,
-        longitude: -115.4821313
-    )
+  name: "Mojave Desert",
+  foundingYear: 0,
+  location: Coordinate(
+    latitude: 35.0110079,
+    longitude: -115.4821313
+  )
 )
 let encoder = CborEncoder()
 let decoder = CborDecoder()
