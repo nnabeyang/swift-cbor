@@ -4,28 +4,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "swift-cbor",
-    platforms: [.macOS(.v11), .iOS(.v14)],
-    products: [
-        .library(
-            name: "SwiftCbor",
-            targets: ["SwiftCbor"]),
-    ],
-    dependencies: [
-        .package(url: "https://github.com/nicklockwood/SwiftFormat", exact: "0.53.8")
-    ],
-    targets: [
-        .target(name: "SwiftCbor"),
-        .executableTarget(
-            name: "example",
-            dependencies: [
-                "SwiftCbor",
-            ],
-            path: "Example"
-        ),
-        .testTarget(
-            name: "SwiftCborTests",
-            dependencies: ["SwiftCbor"]
-        ),
-    ]
+  name: "swift-cbor",
+  platforms: [.macOS(.v11), .iOS(.v14)],
+  products: [
+    .library(
+      name: "SwiftCbor",
+      targets: ["SwiftCbor"])
+  ],
+  targets: [
+    .target(name: "SwiftCbor"),
+    .executableTarget(
+      name: "example",
+      dependencies: [
+        "SwiftCbor"
+      ],
+      path: "Example"
+    ),
+    .testTarget(
+      name: "SwiftCborTests",
+      dependencies: ["SwiftCbor"]
+    ),
+  ]
 )
