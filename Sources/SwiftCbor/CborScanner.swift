@@ -3,9 +3,12 @@ import Foundation
 class CborScanner {
   private let data: Data
   private var off: Int
-  init(data: Data) {
+  let options: CborDecoder.Options
+
+  init(data: Data, options: CborDecoder.Options = []) {
     self.data = data
     off = 0
+    self.options = options
   }
 
   private func read(_ n: Int) -> Data {
@@ -15,49 +18,47 @@ class CborScanner {
     return data[off..<(off + n)]
   }
 
-  func scan() -> CborValue {
+  func scan() throws -> CborValue {
     switch readOpCode() {
     case .uint(let a):
-      scanUInt(additional: a)
+      try scanUInt(additional: a)
     case .nint(let a):
-      scanNInt(additional: a)
+      try scanNInt(additional: a)
     case .bin(let a):
-      scanBinaryString(additional: a)
+      try scanBinaryString(additional: a)
     case .str(let a):
-      scanString(additional: a)
+      try scanString(additional: a)
     case .tagged(let a):
-      scanTaggedValue(additional: a)
+      try scanTaggedValue(additional: a)
     case .float(let a):
-      scanFloat(additional: a)
+      try scanFloat(additional: a)
     case .array(let a):
-      scanArray(additional: a)
+      try scanArray(additional: a)
     case .map(let a):
-      scanMap(additional: a)
+      try scanMap(additional: a)
     case .end:
       .none
     }
   }
 
-  private func scanUInt(additional c: UInt8) -> CborValue {
-    let (data, type) = _scanUInt(c: c)
-    return .literal(.uint(data, type))
+  private func scanUInt(additional c: UInt8) throws -> CborValue {
+    .literal(.uint(try _scanUInt(c: c)))
   }
 
-  private func scanNInt(additional c: UInt8) -> CborValue {
-    let (data, type) = _scanUInt(c: c)
-    return .literal(.int(data, type))
+  private func scanNInt(additional c: UInt8) throws -> CborValue {
+    .literal(.int(try _scanUInt(c: c)))
   }
 
-  private func scanBinaryString(additional: UInt8) -> CborValue {
-    .literal(.bin(scanSequence(additional: additional)))
+  private func scanBinaryString(additional: UInt8) throws -> CborValue {
+    try .literal(.bin(scanSequence(additional: additional)))
   }
 
-  private func scanString(additional: UInt8) -> CborValue {
-    .literal(.str(scanSequence(additional: additional)))
+  private func scanString(additional: UInt8) throws -> CborValue {
+    try .literal(.str(scanSequence(additional: additional)))
   }
 
-  private func scanSequence(additional c: UInt8) -> Data {
-    if let n = getLength(c: c) {
+  private func scanSequence(additional c: UInt8) throws -> Data {
+    if let n = try getLength(c: c) {
       return read(n)
     } else {
       let start = off
@@ -68,10 +69,10 @@ class CborScanner {
     }
   }
 
-  private func scanFloat(additional c: UInt8) -> CborValue {
+  private func scanFloat(additional c: UInt8) throws -> CborValue {
     switch c {
     case 0x00...0x13:
-      .literal(.uint(.init([c]), UInt8.self))
+      .literal(.uint(UInt64(c)))
     case 0x14:
       .literal(.bool(false))
     case 0x15:
@@ -79,7 +80,7 @@ class CborScanner {
     case 0x16, 0x17:
       .literal(.nil)
     case 0x18:
-      .literal(.uint(read(1 << 0), UInt8.self))
+      .literal(.uint(UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))))
     case 0x19:
       .literal(.float16(read(1 << 1)))
     case 0x1A:
@@ -93,21 +94,20 @@ class CborScanner {
     }
   }
 
-  private func scanTaggedValue(additional c: UInt8) -> CborValue {
-    let (data, type) = _scanUInt(c: c)
-    return .tagged(tag: .uint(data, type), value: scan())
+  private func scanTaggedValue(additional c: UInt8) throws -> CborValue {
+    return try .tagged(tag: .uint(_scanUInt(c: c)), value: scan())
   }
 
-  private func scanArray(additional c: UInt8) -> CborValue {
+  private func scanArray(additional c: UInt8) throws -> CborValue {
     var a: [CborValue] = []
-    if let n = getLength(c: c) {
+    if let n = try getLength(c: c) {
       a.reserveCapacity(n)
       for _ in 0..<n {
-        a.append(scan())
+        try a.append(scan())
       }
     } else {
       while true {
-        let e = scan()
+        let e = try scan()
         if case .literal(.break) = e {
           break
         }
@@ -117,21 +117,21 @@ class CborScanner {
     return .array(a)
   }
 
-  private func scanMap(additional c: UInt8) -> CborValue {
+  private func scanMap(additional c: UInt8) throws -> CborValue {
     var a: [CborValue] = []
-    if let n = getLength(c: c) {
+    if let n = try getLength(c: c) {
       a.reserveCapacity(n)
       for _ in 0..<n {
-        a.append(scan())
-        a.append(scan())
+        try a.append(scan())
+        try a.append(scan())
       }
     } else {
       while true {
-        let k = scan()
+        let k = try scan()
         if case .literal(.break) = k {
           break
         }
-        let v = scan()
+        let v = try scan()
         if case .literal(.break) = k {
           break
         }
@@ -142,26 +142,55 @@ class CborScanner {
     return .map(a)
   }
 
-  private func getLength(c: UInt8) -> Int? {
+  private func getLength(c: UInt8) throws -> Int? {
     guard c != 0x1F else { return nil }
-    let (data, type) = _scanUInt(c: c)
-    return Int(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+    return Int(truncatingIfNeeded: try _scanUInt(c: c))
   }
 
-  private func _scanUInt(c: UInt8) -> (Data, any FixedWidthInteger.Type) {
+  private func _scanUInt(c: UInt8) throws -> UInt64 {
+    if case 0x00...0x17 = c {
+      return UInt64(c)
+    }
+
+    let result: UInt64
     switch c {
-    case 0x00...0x17:
-      (.init([c]), UInt8.self)
     case 0x18:
-      (read(1 << 0), UInt8.self)
+      result = UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))
     case 0x19:
-      (read(1 << 1), UInt16.self)
+      result = UInt64(bigEndianFixedWidthInt(read(1 << 1), as: UInt16.self))
     case 0x1A:
-      (read(1 << 2), UInt32.self)
+      result = UInt64(bigEndianFixedWidthInt(read(1 << 2), as: UInt32.self))
     case 0x1B:
-      (read(1 << 3), UInt64.self)
+      result = bigEndianFixedWidthInt(read(1 << 3), as: UInt64.self)
     default:
       fatalError()
+    }
+    if options.contains(.minimalArgumentEncoding) {
+      try requireMinimalArgument(additional: c, value: result)
+    }
+    return result
+  }
+
+  private func requireMinimalArgument(additional c: UInt8, value: UInt64) throws {
+    let minimum: UInt64
+    switch c {
+    case 0x18:
+      minimum = UInt64(Int.fixMax) + 1
+    case 0x19:
+      minimum = UInt64(UInt8.max) + 1
+    case 0x1A:
+      minimum = UInt64(UInt16.max) + 1
+    case 0x1B:
+      minimum = UInt64(UInt32.max) + 1
+    default:
+      return
+    }
+    guard value >= minimum else {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription: "CBOR argument uses a non-minimal encoding."
+        ))
     }
   }
 
