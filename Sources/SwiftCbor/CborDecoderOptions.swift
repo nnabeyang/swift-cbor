@@ -7,5 +7,6 @@ extension CborDecoder {
     }
 
     public static let minimalArgumentEncoding = Options(rawValue: 1 << 0)
+    public static let definiteLengthItems = Options(rawValue: 1 << 1)
   }
 }

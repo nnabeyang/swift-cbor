@@ -60,4 +60,17 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertEqual(try CborDecoder().decode(UInt8.self, from: Data(hex: "1817")), 23)
   }
 
+  func testDefiniteLengthItemsRejectsIndefiniteArray() {
+    let decoder = CborDecoder(options: .definiteLengthItems)
+    XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "9f0102ff")))
+  }
+
+  func testDefiniteLengthItemsRejectsIndefiniteString() {
+    let decoder = CborDecoder(options: .definiteLengthItems)
+    XCTAssertThrowsError(try decoder.decode(String.self, from: Data(hex: "7f6161ff")))
+  }
+
+  func testDefaultDecoderAcceptsIndefiniteArray() throws {
+    XCTAssertEqual(try CborDecoder().decode([Int].self, from: Data(hex: "9f0102ff")), [1, 2])
+  }
 }

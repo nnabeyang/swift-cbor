@@ -61,6 +61,7 @@ class CborScanner {
     if let n = try getLength(c: c) {
       return read(n)
     } else {
+      try rejectIndefiniteLengthItem("byte or text string")
       let start = off
       while data[off] != 0xFF {
         off += 1
@@ -72,25 +73,33 @@ class CborScanner {
   private func scanFloat(additional c: UInt8) throws -> CborValue {
     switch c {
     case 0x00...0x13:
-      .literal(.uint(UInt64(c)))
+      return .literal(.uint(UInt64(c)))
     case 0x14:
-      .literal(.bool(false))
+      return .literal(.bool(false))
     case 0x15:
-      .literal(.bool(true))
+      return .literal(.bool(true))
     case 0x16, 0x17:
-      .literal(.nil)
+      return .literal(.nil)
     case 0x18:
-      .literal(.uint(UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))))
+      return .literal(.uint(UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))))
     case 0x19:
-      .literal(.float16(read(1 << 1)))
+      return .literal(.float16(read(1 << 1)))
     case 0x1A:
-      .literal(.float32(read(1 << 2)))
+      return .literal(.float32(read(1 << 2)))
     case 0x1B:
-      .literal(.float64(read(1 << 3)))
+      return .literal(.float64(read(1 << 3)))
     case 0x1F:
-      .literal(.break)
+      if options.contains(.definiteLengthItems) {
+        throw DecodingError.dataCorrupted(
+          .init(
+            codingPath: [],
+            debugDescription:
+              "A break code is not permitted when definite-length items are required."
+          ))
+      }
+      return .literal(.break)
     default:
-      .none
+      return .none
     }
   }
 
@@ -106,6 +115,7 @@ class CborScanner {
         try a.append(scan())
       }
     } else {
+      try rejectIndefiniteLengthItem("array")
       while true {
         let e = try scan()
         if case .literal(.break) = e {
@@ -126,6 +136,7 @@ class CborScanner {
         try a.append(scan())
       }
     } else {
+      try rejectIndefiniteLengthItem("map")
       while true {
         let k = try scan()
         if case .literal(.break) = k {
@@ -140,6 +151,15 @@ class CborScanner {
       }
     }
     return .map(a)
+  }
+
+  private func rejectIndefiniteLengthItem(_ kind: String) throws {
+    guard options.contains(.definiteLengthItems) else { return }
+    throw DecodingError.dataCorrupted(
+      .init(
+        codingPath: [],
+        debugDescription: "Indefinite-length \(kind) is not permitted."
+      ))
   }
 
   private func getLength(c: UInt8) throws -> Int? {
