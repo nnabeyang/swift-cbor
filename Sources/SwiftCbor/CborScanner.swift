@@ -39,13 +39,11 @@ class CborScanner {
   }
 
   private func scanUInt(additional c: UInt8) -> CborValue {
-    let (data, type) = _scanUInt(c: c)
-    return .literal(.uint(data, type))
+    .literal(.uint(_scanUInt(c: c)))
   }
 
   private func scanNInt(additional c: UInt8) -> CborValue {
-    let (data, type) = _scanUInt(c: c)
-    return .literal(.int(data, type))
+    .literal(.int(_scanUInt(c: c)))
   }
 
   private func scanBinaryString(additional: UInt8) -> CborValue {
@@ -71,7 +69,7 @@ class CborScanner {
   private func scanFloat(additional c: UInt8) -> CborValue {
     switch c {
     case 0x00...0x13:
-      .literal(.uint(.init([c]), UInt8.self))
+      .literal(.uint(UInt64(c)))
     case 0x14:
       .literal(.bool(false))
     case 0x15:
@@ -79,7 +77,7 @@ class CborScanner {
     case 0x16, 0x17:
       .literal(.nil)
     case 0x18:
-      .literal(.uint(read(1 << 0), UInt8.self))
+      .literal(.uint(UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))))
     case 0x19:
       .literal(.float16(read(1 << 1)))
     case 0x1A:
@@ -94,8 +92,7 @@ class CborScanner {
   }
 
   private func scanTaggedValue(additional c: UInt8) -> CborValue {
-    let (data, type) = _scanUInt(c: c)
-    return .tagged(tag: .uint(data, type), value: scan())
+    .tagged(tag: .uint(_scanUInt(c: c)), value: scan())
   }
 
   private func scanArray(additional c: UInt8) -> CborValue {
@@ -144,22 +141,21 @@ class CborScanner {
 
   private func getLength(c: UInt8) -> Int? {
     guard c != 0x1F else { return nil }
-    let (data, type) = _scanUInt(c: c)
-    return Int(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+    return Int(truncatingIfNeeded: _scanUInt(c: c))
   }
 
-  private func _scanUInt(c: UInt8) -> (Data, any FixedWidthInteger.Type) {
+  private func _scanUInt(c: UInt8) -> UInt64 {
     switch c {
     case 0x00...0x17:
-      (.init([c]), UInt8.self)
+      UInt64(c)
     case 0x18:
-      (read(1 << 0), UInt8.self)
+      UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))
     case 0x19:
-      (read(1 << 1), UInt16.self)
+      UInt64(bigEndianFixedWidthInt(read(1 << 1), as: UInt16.self))
     case 0x1A:
-      (read(1 << 2), UInt32.self)
+      UInt64(bigEndianFixedWidthInt(read(1 << 2), as: UInt32.self))
     case 0x1B:
-      (read(1 << 3), UInt64.self)
+      bigEndianFixedWidthInt(read(1 << 3), as: UInt64.self)
     default:
       fatalError()
     }

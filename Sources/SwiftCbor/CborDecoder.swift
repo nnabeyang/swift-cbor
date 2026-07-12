@@ -149,10 +149,10 @@ extension _CborDecoder {
   fileprivate func unboxInt(_ value: CborValue) throws -> Int {
     if case .literal(let vv) = value {
       switch vv {
-      case .uint(let data, let type):
-        return Int(bigEndianFixedWidthInt(data, as: type))
-      case .int(let data, let type):
-        return ~Int(bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return Int(argument)
+      case .int(let argument):
+        return ~Int(argument)
       default:
         break
       }
@@ -170,10 +170,10 @@ extension _CborDecoder {
   fileprivate func unboxInt8(_ value: CborValue) throws -> Int8 {
     if case .literal(let vv) = value {
       switch vv {
-      case .uint(let data, let type):
-        return Int8(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
-      case .int(let data, let type):
-        return ~Int8(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return Int8(truncatingIfNeeded: argument)
+      case .int(let argument):
+        return ~Int8(truncatingIfNeeded: argument)
       default:
         break
       }
@@ -191,10 +191,10 @@ extension _CborDecoder {
   fileprivate func unboxInt16(_ value: CborValue) throws -> Int16 {
     if case .literal(let vv) = value {
       switch vv {
-      case .uint(let data, let type):
-        return Int16(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
-      case .int(let data, let type):
-        return ~Int16(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return Int16(truncatingIfNeeded: argument)
+      case .int(let argument):
+        return ~Int16(truncatingIfNeeded: argument)
       default:
         break
       }
@@ -212,10 +212,10 @@ extension _CborDecoder {
   fileprivate func unboxInt32(_ value: CborValue) throws -> Int32 {
     if case .literal(let vv) = value {
       switch vv {
-      case .uint(let data, let type):
-        return Int32(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
-      case .int(let data, let type):
-        return ~Int32(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return Int32(truncatingIfNeeded: argument)
+      case .int(let argument):
+        return ~Int32(truncatingIfNeeded: argument)
       default:
         break
       }
@@ -233,10 +233,10 @@ extension _CborDecoder {
   fileprivate func unboxInt64(_ value: CborValue) throws -> Int64 {
     if case .literal(let vv) = value {
       switch vv {
-      case .uint(let data, let type):
-        return Int64(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
-      case .int(let data, let type):
-        return ~Int64(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return Int64(truncatingIfNeeded: argument)
+      case .int(let argument):
+        return ~Int64(truncatingIfNeeded: argument)
       default:
         break
       }
@@ -254,8 +254,8 @@ extension _CborDecoder {
   fileprivate func unboxUInt(_ value: CborValue) throws -> UInt {
     if case .literal(let literal) = value {
       switch literal {
-      case .uint(let data, let type):
-        return UInt(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return UInt(truncatingIfNeeded: argument)
       default:
         break
       }
@@ -273,8 +273,8 @@ extension _CborDecoder {
   fileprivate func unboxUInt8(_ value: CborValue) throws -> UInt8 {
     if case .literal(let literal) = value {
       switch literal {
-      case .uint(let data, let type):
-        return UInt8(bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return UInt8(argument)
       default:
         break
       }
@@ -292,8 +292,8 @@ extension _CborDecoder {
   fileprivate func unboxUInt16(_ value: CborValue) throws -> UInt16 {
     if case .literal(let literal) = value {
       switch literal {
-      case .uint(let data, let type):
-        return UInt16(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return UInt16(truncatingIfNeeded: argument)
       default:
         break
       }
@@ -311,8 +311,8 @@ extension _CborDecoder {
   fileprivate func unboxUInt32(_ value: CborValue) throws -> UInt32 {
     if case .literal(let literal) = value {
       switch literal {
-      case .uint(let data, let type):
-        return UInt32(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return UInt32(truncatingIfNeeded: argument)
       default:
         break
       }
@@ -330,8 +330,8 @@ extension _CborDecoder {
   fileprivate func unboxUInt64(_ value: CborValue) throws -> UInt64 {
     if case .literal(let literal) = value {
       switch literal {
-      case .uint(let data, let type):
-        return UInt64(truncatingIfNeeded: bigEndianFixedWidthInt(data, as: type))
+      case .uint(let argument):
+        return argument
       default:
         break
       }

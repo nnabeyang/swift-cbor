@@ -4,8 +4,8 @@ enum CborValueLiteralType {
   case `nil`
   case `break`
   case bool(Bool)
-  case int(Data, any FixedWidthInteger.Type)
-  case uint(Data, any FixedWidthInteger.Type)
+  case int(UInt64)
+  case uint(UInt64)
   case float16(Data)
   case float32(Data)
   case float64(Data)
@@ -22,10 +22,10 @@ extension CborValueLiteralType {
       "break"
     case .bool:
       "bool"
-    case .int(_, let type):
-      String(describing: type).lowercased()
-    case .uint(_, let type):
-      String(describing: type).lowercased()
+    case .int:
+      "int"
+    case .uint:
+      "uint"
     case .float16:
       "float16"
     case .float32:
