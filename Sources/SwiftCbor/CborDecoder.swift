@@ -9,10 +9,15 @@ private protocol _CborArrayDecodableMarker {}
 extension Array: _CborArrayDecodableMarker where Element: Decodable {}
 
 open class CborDecoder {
-  public init() {}
+  public var options: Options
+
+  public init(options: Options = []) {
+    self.options = options
+  }
+
   open func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-    let scanner = CborScanner(data: data)
-    let value = scanner.scan()
+    let scanner = CborScanner(data: data, options: options)
+    let value = try scanner.scan()
     let decoder: _CborDecoder = .init(from: value)
     do {
       return try decoder.unwrap(as: T.self)
