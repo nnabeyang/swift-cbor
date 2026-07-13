@@ -5,10 +5,17 @@ private protocol _CborDictionaryEncodableMarker {}
 extension Dictionary: _CborDictionaryEncodableMarker where Key: Encodable, Value: Encodable {}
 
 open class CborEncoder {
-  public init() {}
+  public var options: Options
+
+  public init(options: Options = []) {
+    self.options = options
+  }
+
   open func encode(_ value: some Encodable) throws -> Data {
     let value: CborEncodedValue = try encodeAsCborValue(value)
-    let writer = CborValue.Writer()
+    let writer = CborValue.Writer(
+      sortMapKeysLexicographically: options.contains(.lexicographicallySortedMapKeys)
+    )
     let bytes = writer.writeValue(value)
     return Data(bytes)
   }

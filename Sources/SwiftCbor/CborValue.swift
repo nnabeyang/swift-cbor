@@ -151,6 +151,12 @@ extension CborValue {
 
 extension CborValue {
   struct Writer {
+    private let sortMapKeysLexicographically: Bool
+
+    init(sortMapKeysLexicographically: Bool = false) {
+      self.sortMapKeysLexicographically = sortMapKeysLexicographically
+    }
+
     func writeValue(_ value: CborEncodedValue) -> [UInt8] {
       var bytes: [UInt8] = .init()
       writeValue(value, into: &bytes)
@@ -194,11 +200,33 @@ extension CborValue {
           bytes.append(contentsOf: [0xBB] + n.bigEndianBytes(as: UInt64.self))
         }
 
-        for i in 0..<n {
-          let key = a[i * 2]
-          let value = a[i * 2 + 1]
-          writeValue(key, into: &bytes)
-          writeValue(value, into: &bytes)
+        if sortMapKeysLexicographically {
+          var keys: [([UInt8], Int)] = []
+          keys.reserveCapacity(n)
+          for i in 0..<n {
+            let index = i * 2
+            let key = a[index]
+            let encodedKey: [UInt8]
+            if case .literal(let data) = key {
+              encodedKey = data
+            } else {
+              encodedKey = writeValue(key)
+            }
+            keys.append((encodedKey, index))
+          }
+          keys.sort { $0.0.lexicographicallyPrecedes($1.0) }
+
+          for (encodedKey, index) in keys {
+            bytes.append(contentsOf: encodedKey)
+            writeValue(a[index + 1], into: &bytes)
+          }
+        } else {
+          for i in 0..<n {
+            let key = a[i * 2]
+            let value = a[i * 2 + 1]
+            writeValue(key, into: &bytes)
+            writeValue(value, into: &bytes)
+          }
         }
       default:
         break
