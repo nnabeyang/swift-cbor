@@ -271,6 +271,9 @@ extension _SpecialTreatmentEncoder {
   fileprivate func wrapFloat<F: BinaryFloatingPoint & DataNumber>(
     _ value: F, for additionalKey: CodingKey?
   ) throws -> CborEncodedValue {
+    if encoder.options.contains(.shortestFloatingPointEncoding) {
+      return shortestFloatingPointValue(value)
+    }
     let bits = value.bytes
     if bits.count == 2 {
       return .literal([0xF9] + bits)
@@ -293,6 +296,64 @@ extension _SpecialTreatmentEncoder {
         codingPath: path,
         debugDescription: "Unable to encode \(F.self).\(value) directly in MessagePack."
       ))
+  }
+
+  private func shortestFloatingPointValue(
+    _ value: some BinaryFloatingPoint & DataNumber
+  ) -> CborEncodedValue {
+    if value.isNaN {
+      return shortestNaNValue(value)
+    }
+
+    let double = Double(value)
+    let half = Float16(double)
+    if sameFloatingPointValue(Double(half), double) {
+      return .literal([0xF9] + half.bytes)
+    }
+
+    let single = Float(double)
+    if sameFloatingPointValue(Double(single), double) {
+      return .literal([0xFA] + single.bytes)
+    }
+
+    return .literal([0xFB] + double.bytes)
+  }
+
+  private func shortestNaNValue<F: BinaryFloatingPoint & DataNumber>(
+    _ value: F
+  ) -> CborEncodedValue {
+    let significand = UInt64(value.significandBitPattern)
+    let sourceWidth = F.significandBitCount
+    let isNegative = value.sign == .minus
+
+    if let narrowed = narrowedNaNSignificand(significand, from: sourceWidth, to: 10) {
+      let sign: UInt16 = isNegative ? 0x8000 : 0
+      let bits = Float16(bitPattern: sign | 0x7C00 | UInt16(narrowed)).bytes
+      return .literal([0xF9] + bits)
+    }
+
+    if let narrowed = narrowedNaNSignificand(significand, from: sourceWidth, to: 23) {
+      let sign: UInt32 = isNegative ? 0x8000_0000 : 0
+      let bits = Float(bitPattern: sign | 0x7F80_0000 | UInt32(narrowed)).bytes
+      return .literal([0xFA] + bits)
+    }
+
+    return .literal([0xFB] + value.bytes)
+  }
+
+  private func narrowedNaNSignificand(
+    _ significand: UInt64, from sourceWidth: Int, to targetWidth: Int
+  ) -> UInt64? {
+    guard sourceWidth >= targetWidth else { return nil }
+    let discardedWidth = sourceWidth - targetWidth
+    let discardedMask = discardedWidth == 0 ? 0 : (UInt64(1) << discardedWidth) - 1
+    guard significand & discardedMask == 0 else { return nil }
+    let narrowed = significand >> discardedWidth
+    return narrowed == 0 ? nil : narrowed
+  }
+
+  private func sameFloatingPointValue(_ lhs: Double, _ rhs: Double) -> Bool {
+    lhs == rhs && (lhs != 0 || lhs.sign == rhs.sign)
   }
 
   fileprivate func wrapInt(

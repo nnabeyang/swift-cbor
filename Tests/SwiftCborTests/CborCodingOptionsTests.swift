@@ -127,4 +127,91 @@ final class CborCodingOptionsTests: XCTestCase {
 
     XCTAssertEqual(Data(writer.writeValue(value)).hexDescription, "a1a261610161620200")
   }
+
+  func testShortestFloatingPointEncodingSelectsSmallestExactWidth() throws {
+    let encoder = CborEncoder(options: .shortestFloatingPointEncoding)
+
+    XCTAssertEqual(try encoder.encode(Double(1.5)).hexDescription, "f93e00")
+    XCTAssertEqual(try encoder.encode(Double(1.1)).hexDescription, "fb3ff199999999999a")
+    XCTAssertEqual(try encoder.encode(Double(65_504)).hexDescription, "f97bff")
+    XCTAssertEqual(try encoder.encode(Double(100_000)).hexDescription, "fa47c35000")
+    XCTAssertEqual(try encoder.encode(Double(1_000_000.5)).hexDescription, "fa49742408")
+    XCTAssertEqual(try encoder.encode(Double(5.960464477539063e-8)).hexDescription, "f90001")
+    XCTAssertEqual(try encoder.encode(Double(0.00006103515625)).hexDescription, "f90400")
+    XCTAssertEqual(
+      try encoder.encode(Double.greatestFiniteMagnitude).hexDescription,
+      "fb7fefffffffffffff")
+  }
+
+  func testShortestFloatingPointEncodingHandlesSpecialValues() throws {
+    let encoder = CborEncoder(options: .shortestFloatingPointEncoding)
+
+    XCTAssertEqual(try encoder.encode(Double.zero).hexDescription, "f90000")
+    XCTAssertEqual(try encoder.encode(-Double.zero).hexDescription, "f98000")
+    XCTAssertEqual(try encoder.encode(Double.infinity).hexDescription, "f97c00")
+    XCTAssertEqual(try encoder.encode(-Double.infinity).hexDescription, "f9fc00")
+    XCTAssertEqual(try encoder.encode(Double.nan).hexDescription, "f97e00")
+    XCTAssertEqual(
+      try encoder.encode(Float(bitPattern: 0xFFC0_0000)).hexDescription,
+      "f9fe00")
+  }
+
+  func testShortestFloatingPointEncodingPreservesNaNRepresentations() throws {
+    let encoder = CborEncoder(options: .shortestFloatingPointEncoding)
+
+    XCTAssertEqual(
+      try encoder.encode(Float16(bitPattern: 0x7D01)).hexDescription,
+      "f97d01")
+    XCTAssertEqual(
+      try encoder.encode(Float(bitPattern: 0xFFC1_2345)).hexDescription,
+      "faffc12345")
+    XCTAssertEqual(
+      try encoder.encode(Double(bitPattern: 0x7FF8_0000_2000_0000)).hexDescription,
+      "fa7fc00001")
+    XCTAssertEqual(
+      try encoder.encode(Double(bitPattern: 0x7FF8_0000_0000_0001)).hexDescription,
+      "fb7ff8000000000001")
+  }
+
+  func testShortestFloatingPointEncodingPreservesEveryFloat16BitPattern() throws {
+    let encoder = CborEncoder(options: .shortestFloatingPointEncoding)
+
+    for bitPattern in UInt16.min...UInt16.max {
+      let expected = Data([
+        0xF9,
+        UInt8(truncatingIfNeeded: bitPattern >> 8),
+        UInt8(truncatingIfNeeded: bitPattern),
+      ])
+      let actual = try encoder.encode(Float16(bitPattern: bitPattern))
+      if actual != expected {
+        XCTFail(
+          "Float16 bit pattern \(String(bitPattern, radix: 16)) encoded as \(actual.hexDescription)"
+        )
+        return
+      }
+    }
+  }
+
+  func testDefaultEncoderPreservesFloatingPointSourceWidth() throws {
+    let encoder = CborEncoder()
+
+    XCTAssertEqual(try encoder.encode(Float16(1.5)).hexDescription, "f93e00")
+    XCTAssertEqual(try encoder.encode(Float(1.5)).hexDescription, "fa3fc00000")
+    XCTAssertEqual(try encoder.encode(Double(1.5)).hexDescription, "fb3ff8000000000000")
+  }
+
+  func testShortestFloatingPointEncodingCombinesWithRecursiveMapSorting() throws {
+    let options: CborEncoder.Options = [
+      .lexicographicallySortedMapKeys,
+      .shortestFloatingPointEncoding,
+    ]
+    let encoder = CborEncoder(options: options)
+
+    XCTAssertEqual(
+      try encoder.encode([
+        "b": [Double(2)],
+        "a": [Double(1.5)],
+      ]).hexDescription,
+      "a2616181f93e00616281f94000")
+  }
 }

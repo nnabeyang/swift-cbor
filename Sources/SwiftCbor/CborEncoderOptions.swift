@@ -7,5 +7,6 @@ extension CborEncoder {
     }
 
     public static let lexicographicallySortedMapKeys = Options(rawValue: 1 << 0)
+    public static let shortestFloatingPointEncoding = Options(rawValue: 1 << 1)
   }
 }
