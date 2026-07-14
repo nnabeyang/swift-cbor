@@ -21,7 +21,7 @@ open class CborEncoder {
   }
 
   func encodeAsCborValue<T: Encodable>(_ value: T) throws -> CborEncodedValue {
-    let encoder = _CborEncoder(codingPath: [])
+    let encoder = _CborEncoder(codingPath: [], options: options)
     guard let result = try encoder.wrapEncodable(value, for: CodingKey?.none) else {
       throw EncodingError.invalidValue(
         value,
@@ -35,9 +35,11 @@ open class CborEncoder {
 private class _CborEncoder: Encoder {
   public var codingPath: [CodingKey] = []
   public var userInfo: [CodingUserInfoKey: Any] = [:]
+  let options: CborEncoder.Options
 
-  init(codingPath: [CodingKey] = []) {
+  init(codingPath: [CodingKey], options: CborEncoder.Options) {
     self.codingPath = codingPath
+    self.options = options
   }
 
   var singleValue: CborEncodedValue?
@@ -422,7 +424,7 @@ extension _SpecialTreatmentEncoder {
   fileprivate func getEncoder(for additionalKey: CodingKey?) -> _CborEncoder {
     if let additionalKey {
       let newCodidngPath: [CodingKey] = codingPath + [additionalKey]
-      return _CborEncoder(codingPath: newCodidngPath)
+      return _CborEncoder(codingPath: newCodidngPath, options: encoder.options)
     }
     return encoder
   }
