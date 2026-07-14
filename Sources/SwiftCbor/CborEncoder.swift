@@ -268,7 +268,7 @@ extension FixedWidthInteger {
 }
 
 extension _SpecialTreatmentEncoder {
-  fileprivate func wrapFloat<F: FloatingPoint & DataNumber>(
+  fileprivate func wrapFloat<F: BinaryFloatingPoint & DataNumber>(
     _ value: F, for additionalKey: CodingKey?
   ) throws -> CborEncodedValue {
     let bits = value.bytes
@@ -511,7 +511,7 @@ private struct CborSingleValueEncodingContainer: SingleValueEncodingContainer,
   }
 
   @inline(__always)
-  private func encodeFloat<T: FloatingPoint & DataNumber>(_ value: T) throws {
+  private func encodeFloat<T: BinaryFloatingPoint & DataNumber>(_ value: T) throws {
     encoder.singleValue = try encoder.wrapFloat(value, for: nil)
   }
 }
@@ -610,7 +610,7 @@ private struct CborUnkeyedEncodingContainer: UnkeyedEncodingContainer {
     try array.append(encoder.wrapInt(value, for: nil))
   }
 
-  private func encodeFloat(_ value: some FloatingPoint & DataNumber) throws {
+  private func encodeFloat(_ value: some BinaryFloatingPoint & DataNumber) throws {
     try array.append(encoder.wrapFloat(value, for: nil))
   }
 
@@ -756,7 +756,7 @@ private struct CborKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
     return newEncoder
   }
 
-  private func encodeFloat(_ value: some FloatingPoint & DataNumber, for key: Key) throws {
+  private func encodeFloat(_ value: some BinaryFloatingPoint & DataNumber, for key: Key) throws {
     let value = try encoder.wrapFloat(value, for: nil)
     try map.set(value, for: encoder.wrapStringKey(key.stringValue, for: key))
   }
