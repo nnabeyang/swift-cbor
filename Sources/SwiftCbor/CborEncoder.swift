@@ -21,7 +21,7 @@ open class CborEncoder {
   }
 
   func encodeAsCborValue<T: Encodable>(_ value: T) throws -> CborEncodedValue {
-    let encoder = _CborEncoder(codingPath: [])
+    let encoder = _CborEncoder(codingPath: [], options: options)
     guard let result = try encoder.wrapEncodable(value, for: CodingKey?.none) else {
       throw EncodingError.invalidValue(
         value,
@@ -35,9 +35,11 @@ open class CborEncoder {
 private class _CborEncoder: Encoder {
   public var codingPath: [CodingKey] = []
   public var userInfo: [CodingUserInfoKey: Any] = [:]
+  let options: CborEncoder.Options
 
-  init(codingPath: [CodingKey] = []) {
+  init(codingPath: [CodingKey], options: CborEncoder.Options) {
     self.codingPath = codingPath
+    self.options = options
   }
 
   var singleValue: CborEncodedValue?
@@ -266,9 +268,12 @@ extension FixedWidthInteger {
 }
 
 extension _SpecialTreatmentEncoder {
-  fileprivate func wrapFloat<F: FloatingPoint & DataNumber>(
+  fileprivate func wrapFloat<F: BinaryFloatingPoint & DataNumber>(
     _ value: F, for additionalKey: CodingKey?
   ) throws -> CborEncodedValue {
+    if encoder.options.contains(.shortestFloatingPointEncoding) {
+      return shortestFloatingPointValue(value)
+    }
     let bits = value.bytes
     if bits.count == 2 {
       return .literal([0xF9] + bits)
@@ -291,6 +296,64 @@ extension _SpecialTreatmentEncoder {
         codingPath: path,
         debugDescription: "Unable to encode \(F.self).\(value) directly in MessagePack."
       ))
+  }
+
+  private func shortestFloatingPointValue(
+    _ value: some BinaryFloatingPoint & DataNumber
+  ) -> CborEncodedValue {
+    if value.isNaN {
+      return shortestNaNValue(value)
+    }
+
+    let double = Double(value)
+    let half = Float16(double)
+    if sameFloatingPointValue(Double(half), double) {
+      return .literal([0xF9] + half.bytes)
+    }
+
+    let single = Float(double)
+    if sameFloatingPointValue(Double(single), double) {
+      return .literal([0xFA] + single.bytes)
+    }
+
+    return .literal([0xFB] + double.bytes)
+  }
+
+  private func shortestNaNValue<F: BinaryFloatingPoint & DataNumber>(
+    _ value: F
+  ) -> CborEncodedValue {
+    let significand = UInt64(value.significandBitPattern)
+    let sourceWidth = F.significandBitCount
+    let isNegative = value.sign == .minus
+
+    if let narrowed = narrowedNaNSignificand(significand, from: sourceWidth, to: 10) {
+      let sign: UInt16 = isNegative ? 0x8000 : 0
+      let bits = Float16(bitPattern: sign | 0x7C00 | UInt16(narrowed)).bytes
+      return .literal([0xF9] + bits)
+    }
+
+    if let narrowed = narrowedNaNSignificand(significand, from: sourceWidth, to: 23) {
+      let sign: UInt32 = isNegative ? 0x8000_0000 : 0
+      let bits = Float(bitPattern: sign | 0x7F80_0000 | UInt32(narrowed)).bytes
+      return .literal([0xFA] + bits)
+    }
+
+    return .literal([0xFB] + value.bytes)
+  }
+
+  private func narrowedNaNSignificand(
+    _ significand: UInt64, from sourceWidth: Int, to targetWidth: Int
+  ) -> UInt64? {
+    guard sourceWidth >= targetWidth else { return nil }
+    let discardedWidth = sourceWidth - targetWidth
+    let discardedMask = discardedWidth == 0 ? 0 : (UInt64(1) << discardedWidth) - 1
+    guard significand & discardedMask == 0 else { return nil }
+    let narrowed = significand >> discardedWidth
+    return narrowed == 0 ? nil : narrowed
+  }
+
+  private func sameFloatingPointValue(_ lhs: Double, _ rhs: Double) -> Bool {
+    lhs == rhs && (lhs != 0 || lhs.sign == rhs.sign)
   }
 
   fileprivate func wrapInt(
@@ -422,7 +485,7 @@ extension _SpecialTreatmentEncoder {
   fileprivate func getEncoder(for additionalKey: CodingKey?) -> _CborEncoder {
     if let additionalKey {
       let newCodidngPath: [CodingKey] = codingPath + [additionalKey]
-      return _CborEncoder(codingPath: newCodidngPath)
+      return _CborEncoder(codingPath: newCodidngPath, options: encoder.options)
     }
     return encoder
   }
@@ -509,7 +572,7 @@ private struct CborSingleValueEncodingContainer: SingleValueEncodingContainer,
   }
 
   @inline(__always)
-  private func encodeFloat<T: FloatingPoint & DataNumber>(_ value: T) throws {
+  private func encodeFloat<T: BinaryFloatingPoint & DataNumber>(_ value: T) throws {
     encoder.singleValue = try encoder.wrapFloat(value, for: nil)
   }
 }
@@ -608,7 +671,7 @@ private struct CborUnkeyedEncodingContainer: UnkeyedEncodingContainer {
     try array.append(encoder.wrapInt(value, for: nil))
   }
 
-  private func encodeFloat(_ value: some FloatingPoint & DataNumber) throws {
+  private func encodeFloat(_ value: some BinaryFloatingPoint & DataNumber) throws {
     try array.append(encoder.wrapFloat(value, for: nil))
   }
 
@@ -754,7 +817,7 @@ private struct CborKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
     return newEncoder
   }
 
-  private func encodeFloat(_ value: some FloatingPoint & DataNumber, for key: Key) throws {
+  private func encodeFloat(_ value: some BinaryFloatingPoint & DataNumber, for key: Key) throws {
     let value = try encoder.wrapFloat(value, for: nil)
     try map.set(value, for: encoder.wrapStringKey(key.stringValue, for: key))
   }
