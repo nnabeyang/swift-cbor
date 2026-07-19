@@ -85,9 +85,13 @@ class CborScanner {
     case 0x19:
       return .literal(.float16(read(1 << 1)))
     case 0x1A:
-      return .literal(.float32(read(1 << 2)))
+      let bytes = read(1 << 2)
+      try requireShortestFloatingPointEncoding(bytes, as: Float.self)
+      return .literal(.float32(bytes))
     case 0x1B:
-      return .literal(.float64(read(1 << 3)))
+      let bytes = read(1 << 3)
+      try requireShortestFloatingPointEncoding(bytes, as: Double.self)
+      return .literal(.float64(bytes))
     case 0x1F:
       if options.contains(.definiteLengthItems) {
         throw DecodingError.dataCorrupted(
@@ -129,19 +133,26 @@ class CborScanner {
 
   private func scanMap(additional c: UInt8) throws -> CborValue {
     var a: [CborValue] = []
+    var previousKeyEncoding: Data?
     if let n = try getLength(c: c) {
       a.reserveCapacity(n)
       for _ in 0..<n {
+        let keyStart = off
         try a.append(scan())
+        try requireLexicographicallySortedMapKey(
+          data[keyStart..<off], after: &previousKeyEncoding)
         try a.append(scan())
       }
     } else {
       try rejectIndefiniteLengthItem("map")
       while true {
+        let keyStart = off
         let k = try scan()
         if case .literal(.break) = k {
           break
         }
+        try requireLexicographicallySortedMapKey(
+          data[keyStart..<off], after: &previousKeyEncoding)
         let v = try scan()
         if case .literal(.break) = k {
           break
@@ -151,6 +162,72 @@ class CborScanner {
       }
     }
     return .map(a)
+  }
+
+  private func requireLexicographicallySortedMapKey(
+    _ encoding: Data, after previousEncoding: inout Data?
+  ) throws {
+    guard options.contains(.lexicographicallySortedMapKeys) else { return }
+    if let previousEncoding, encoding.lexicographicallyPrecedes(previousEncoding) {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription: "CBOR map keys are not in bytewise lexicographic order."
+        ))
+    }
+    previousEncoding = encoding
+  }
+
+  private func requireShortestFloatingPointEncoding<F: BinaryFloatingPoint & DataNumber>(
+    _ bytes: Data, as type: F.Type
+  ) throws {
+    guard options.contains(.shortestFloatingPointEncoding) else { return }
+    let value = try F(data: bytes)
+
+    let canNarrow: Bool
+    if value.isNaN {
+      canNarrow = canNarrowNaNSignificand(
+        UInt64(value.significandBitPattern), from: F.significandBitCount)
+    } else {
+      let double = Double(value)
+      let half = Float16(double)
+      if sameFloatingPointValue(Double(half), double) {
+        canNarrow = true
+      } else if F.self == Double.self {
+        let single = Float(double)
+        canNarrow = sameFloatingPointValue(Double(single), double)
+      } else {
+        canNarrow = false
+      }
+    }
+
+    guard !canNarrow else {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription: "CBOR floating-point value does not use its shortest encoding."
+        ))
+    }
+  }
+
+  private func canNarrowNaNSignificand(_ significand: UInt64, from sourceWidth: Int) -> Bool {
+    canNarrowNaNSignificand(significand, from: sourceWidth, to: 10)
+      || (sourceWidth > 23
+        && canNarrowNaNSignificand(significand, from: sourceWidth, to: 23))
+  }
+
+  private func canNarrowNaNSignificand(
+    _ significand: UInt64, from sourceWidth: Int, to targetWidth: Int
+  ) -> Bool {
+    guard sourceWidth > targetWidth else { return false }
+    let discardedWidth = sourceWidth - targetWidth
+    let discardedMask = (UInt64(1) << discardedWidth) - 1
+    guard significand & discardedMask == 0 else { return false }
+    return significand >> discardedWidth != 0
+  }
+
+  private func sameFloatingPointValue(_ lhs: Double, _ rhs: Double) -> Bool {
+    lhs == rhs && (lhs != 0 || lhs.sign == rhs.sign)
   }
 
   private func rejectIndefiniteLengthItem(_ kind: String) throws {
