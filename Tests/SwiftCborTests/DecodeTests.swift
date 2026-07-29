@@ -148,6 +148,21 @@ final class DecodeTests: XCTestCase {
     XCTAssertEqual(
       try decoder.decode(UInt64.self, from: Data(hex: "1bffffffffffffffff")), UInt64.max)
   }
+
+  func testDecodeExtractedDataField() throws {
+    struct Inner: Codable, Equatable {
+      let value: Int
+    }
+    struct Outer: Codable {
+      let inner: Data
+    }
+
+    let innerBytes = try CborEncoder().encode(Inner(value: 7))
+    let outerBytes = try CborEncoder().encode(Outer(inner: innerBytes))
+    let decodedOuter = try decoder.decode(Outer.self, from: outerBytes)
+
+    XCTAssertEqual(try decoder.decode(Inner.self, from: decodedOuter.inner), Inner(value: 7))
+  }
 }
 
 extension UnicodeScalar {
