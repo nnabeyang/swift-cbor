@@ -7,7 +7,7 @@ class CborScanner {
 
   init(data: Data, options: CborDecoder.Options = []) {
     self.data = data
-    off = 0
+    off = data.startIndex
     self.options = options
   }
 
@@ -292,7 +292,7 @@ class CborScanner {
   }
 
   private func readOpCode() -> CborOpCode {
-    if off < data.count {
+    if off < data.endIndex {
       defer {
         off += 1
       }
