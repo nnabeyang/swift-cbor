@@ -10,9 +10,13 @@ extension Array: _CborArrayDecodableMarker where Element: Decodable {}
 
 open class CborDecoder {
   public var options: Options
+  public var allowedTags: Set<UInt64>?
 
-  public init(options: Options = []) {
+  public static let dagCborAllowedTags: Set<UInt64> = [42]
+
+  public init(options: Options = [], allowedTags: Set<UInt64>? = nil) {
     self.options = options
+    self.allowedTags = allowedTags
   }
 
   open func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
@@ -24,7 +28,7 @@ open class CborDecoder {
             "shortestFloatingPointEncoding and floatingPoint64Only cannot be combined."
         ))
     }
-    let scanner = CborScanner(data: data, options: options)
+    let scanner = CborScanner(data: data, options: options, allowedTags: allowedTags)
     let value = try scanner.scan()
     let decoder: _CborDecoder = .init(from: value)
     do {

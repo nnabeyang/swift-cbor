@@ -4,11 +4,15 @@ class CborScanner {
   private let data: Data
   private var off: Int
   let options: CborDecoder.Options
+  let allowedTags: Set<UInt64>?
 
-  init(data: Data, options: CborDecoder.Options = []) {
+  init(
+    data: Data, options: CborDecoder.Options = [], allowedTags: Set<UInt64>? = nil
+  ) {
     self.data = data
     off = data.startIndex
     self.options = options
+    self.allowedTags = allowedTags
   }
 
   private func read(_ n: Int) -> Data {
@@ -150,7 +154,15 @@ class CborScanner {
   }
 
   private func scanTaggedValue(additional c: UInt8) throws -> CborValue {
-    return try .tagged(tag: .uint(_scanUInt(c: c)), value: scan())
+    let tag = try _scanUInt(c: c)
+    if let allowedTags, !allowedTags.contains(tag) {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription: "CBOR tag \(tag) is not in the allowed tag set."
+        ))
+    }
+    return try .tagged(tag: .uint(tag), value: scan())
   }
 
   private func scanArray(additional c: UInt8) throws -> CborValue {
