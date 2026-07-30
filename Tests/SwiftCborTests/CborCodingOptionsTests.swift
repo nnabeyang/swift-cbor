@@ -435,4 +435,30 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertEqual(try decoder.decode(Float.self, from: Data(hex: "fa3fc00000")), 1.5)
     XCTAssertEqual(try decoder.decode(Double.self, from: Data(hex: "fb3ff8000000000000")), 1.5)
   }
+
+  func testFiniteFloatingPointValuesOnlyAcceptsSignedZeroAndBoundaryValues() throws {
+    let encoder = CborEncoder(options: .finiteFloatingPointValuesOnly)
+    XCTAssertNoThrow(try encoder.encode(-0.0))
+    XCTAssertNoThrow(try encoder.encode(Double.leastNonzeroMagnitude))
+    XCTAssertNoThrow(try encoder.encode(Double.greatestFiniteMagnitude))
+  }
+
+  func testFiniteFloatingPointValuesOnlyRejectsSignalingNaN() {
+    let encoder = CborEncoder(options: .finiteFloatingPointValuesOnly)
+    XCTAssertThrowsError(try encoder.encode(Double.signalingNaN))
+    XCTAssertThrowsError(try encoder.encode(Float.signalingNaN))
+  }
+
+  func testFiniteFloatingPointValuesOnlyRejectsFloat16NonFiniteValues() {
+    let encoder = CborEncoder(options: .finiteFloatingPointValuesOnly)
+    XCTAssertThrowsError(try encoder.encode(Float16.nan))
+    XCTAssertThrowsError(try encoder.encode(Float16.infinity))
+  }
+
+  func testFiniteFloatingPointValuesOnlyCombinesWithShortestFloatingPointEncoding() throws {
+    let encoder = CborEncoder(
+      options: [.finiteFloatingPointValuesOnly, .shortestFloatingPointEncoding])
+    XCTAssertEqual(try encoder.encode(Double(1.5)).hexDescription, "f93e00")
+    XCTAssertThrowsError(try encoder.encode(Double.nan))
+  }
 }
