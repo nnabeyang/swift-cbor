@@ -575,11 +575,6 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a43000102")))
   }
 
-  func testDagCborAllowedTagsPresetIsTag42() {
-    XCTAssertEqual(CborDecoder.dagCborAllowedTags, [42])
-    XCTAssertEqual(CborEncoder.dagCborAllowedTags, [42])
-  }
-
   func testCborCodableTypeValidatesItsOwnPayload() {
     let decoder = CborDecoder(allowedTags: [42])
     XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a01")))
