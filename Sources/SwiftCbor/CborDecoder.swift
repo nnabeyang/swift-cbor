@@ -30,6 +30,13 @@ open class CborDecoder {
     }
     let scanner = CborScanner(data: data, options: options, allowedTags: allowedTags)
     let value = try scanner.scan()
+    if options.contains(.singleTopLevelItem), !scanner.isAtEnd {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription: "CBOR input contains bytes after the top-level item."
+        ))
+    }
     let decoder: _CborDecoder = .init(from: value)
     do {
       return try decoder.unwrap(as: T.self)
