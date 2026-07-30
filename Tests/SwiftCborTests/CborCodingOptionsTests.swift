@@ -122,10 +122,11 @@ final class CborCodingOptionsTests: XCTestCase {
         [String: Int].self, from: Data(hex: "a2616101616202")))
   }
 
-  func testLexicographicallySortedMapKeysDoesNotValidateDuplicateKeys() throws {
+  func testLexicographicallySortedMapKeysRejectsDuplicateKeys() throws {
     let options = CborDecoder.Options.lexicographicallySortedMapKeys
 
-    XCTAssertNoThrow(try CborScanner(data: Data(hex: "a2616101616102"), options: options).scan())
+    XCTAssertThrowsError(
+      try CborScanner(data: Data(hex: "a2616101616102"), options: options).scan())
   }
 
   func testDeterministicCborUsesRfc8949BytewiseMapKeyOrder() throws {

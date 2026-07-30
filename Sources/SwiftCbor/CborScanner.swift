@@ -250,11 +250,13 @@ class CborScanner {
     _ encoding: Data, after previousEncoding: inout Data?
   ) throws {
     guard options.contains(.lexicographicallySortedMapKeys) else { return }
-    if let previousEncoding, encoding.lexicographicallyPrecedes(previousEncoding) {
+    if let previousEncoding,
+      encoding == previousEncoding || encoding.lexicographicallyPrecedes(previousEncoding)
+    {
       throw DecodingError.dataCorrupted(
         .init(
           codingPath: [],
-          debugDescription: "CBOR map keys are not in bytewise lexicographic order."
+          debugDescription: "CBOR map keys are duplicated or not in bytewise lexicographic order."
         ))
     }
     previousEncoding = encoding
