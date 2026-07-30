@@ -11,10 +11,30 @@ extension Array: _CborArrayDecodableMarker where Element: Decodable {}
 open class CborDecoder {
   public var options: Options
   public var allowedTags: Set<UInt64>?
+  public var limits: Limits
 
-  public init(options: Options = [], allowedTags: Set<UInt64>? = nil) {
+  public struct Limits: Sendable {
+    public var maximumNestingDepth: Int
+    public var maximumContainerElements: Int
+    public var maximumStringBytes: Int
+
+    public init(
+      maximumNestingDepth: Int = 64,
+      maximumContainerElements: Int = 100_000,
+      maximumStringBytes: Int = 2 * 1_024 * 1_024
+    ) {
+      self.maximumNestingDepth = maximumNestingDepth
+      self.maximumContainerElements = maximumContainerElements
+      self.maximumStringBytes = maximumStringBytes
+    }
+  }
+
+  public init(
+    options: Options = [], allowedTags: Set<UInt64>? = nil, limits: Limits = .init()
+  ) {
     self.options = options
     self.allowedTags = allowedTags
+    self.limits = limits
   }
 
   open func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
@@ -26,7 +46,8 @@ open class CborDecoder {
             "shortestFloatingPointEncoding and floatingPoint64Only cannot be combined."
         ))
     }
-    let scanner = CborScanner(data: data, options: options, allowedTags: allowedTags)
+    let scanner = CborScanner(
+      data: data, options: options, allowedTags: allowedTags, limits: limits)
     let value = try scanner.scan()
     if options.contains(.singleTopLevelItem), !scanner.isAtEnd {
       throw DecodingError.dataCorrupted(

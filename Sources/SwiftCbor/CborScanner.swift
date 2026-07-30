@@ -3,20 +3,28 @@ import Foundation
 class CborScanner {
   private let data: Data
   private var off: Int
+  private var nestingDepth = 0
   let options: CborDecoder.Options
   let allowedTags: Set<UInt64>?
+  let limits: CborDecoder.Limits
   var isAtEnd: Bool { off == data.endIndex }
 
   init(
-    data: Data, options: CborDecoder.Options = [], allowedTags: Set<UInt64>? = nil
+    data: Data, options: CborDecoder.Options = [], allowedTags: Set<UInt64>? = nil,
+    limits: CborDecoder.Limits = .init()
   ) {
     self.data = data
     off = data.startIndex
     self.options = options
     self.allowedTags = allowedTags
+    self.limits = limits
   }
 
-  private func read(_ n: Int) -> Data {
+  private func read(_ n: Int) throws -> Data {
+    guard n >= 0, off <= data.endIndex, n <= data.endIndex - off else {
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+    }
     defer {
       off += n
     }
@@ -24,7 +32,13 @@ class CborScanner {
   }
 
   func scan() throws -> CborValue {
-    switch readOpCode() {
+    nestingDepth += 1
+    defer { nestingDepth -= 1 }
+    guard nestingDepth <= limits.maximumNestingDepth else {
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: [], debugDescription: "CBOR nesting depth limit exceeded."))
+    }
+    return switch readOpCode() {
     case .uint(let a):
       try scanUInt(additional: a)
     case .nint(let a):
@@ -72,12 +86,24 @@ class CborScanner {
 
   private func scanSequence(additional c: UInt8) throws -> Data {
     if let n = try getLength(c: c) {
-      return read(n)
+      guard n <= limits.maximumStringBytes else {
+        throw DecodingError.dataCorrupted(
+          .init(codingPath: [], debugDescription: "CBOR string size limit exceeded."))
+      }
+      return try read(n)
     } else {
       try rejectIndefiniteLengthItem("byte or text string")
       let start = off
-      while data[off] != 0xFF {
+      while off < data.endIndex, data[off] != 0xFF {
+        guard off - start < limits.maximumStringBytes else {
+          throw DecodingError.dataCorrupted(
+            .init(codingPath: [], debugDescription: "CBOR string size limit exceeded."))
+        }
         off += 1
+      }
+      guard off < data.endIndex else {
+        throw DecodingError.dataCorrupted(
+          .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
       }
       return data[start..<off]
     }
@@ -102,18 +128,18 @@ class CborScanner {
       if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(c) }
       return .literal(.undefined)
     case 0x18:
-      let value: UInt8 = bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self)
+      let value: UInt8 = bigEndianFixedWidthInt(try read(1 << 0), as: UInt8.self)
       if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(value) }
       return .literal(.simple(value))
     case 0x19:
-      let bytes = read(1 << 1)
+      let bytes = try read(1 << 1)
       if options.contains(.floatingPoint64Only) { throw requireFloat64Error() }
       if options.contains(.finiteFloatingPointValuesOnly), try !Float16(data: bytes).isFinite {
         throw nonFiniteFloatError()
       }
       return .literal(.float16(bytes))
     case 0x1A:
-      let bytes = read(1 << 2)
+      let bytes = try read(1 << 2)
       if options.contains(.floatingPoint64Only) { throw requireFloat64Error() }
       if options.contains(.finiteFloatingPointValuesOnly), try !Float(data: bytes).isFinite {
         throw nonFiniteFloatError()
@@ -121,7 +147,7 @@ class CborScanner {
       try requireShortestFloatingPointEncoding(bytes, as: Float.self)
       return .literal(.float32(bytes))
     case 0x1B:
-      let bytes = read(1 << 3)
+      let bytes = try read(1 << 3)
       if options.contains(.finiteFloatingPointValuesOnly), try !Double(data: bytes).isFinite {
         throw nonFiniteFloatError()
       }
@@ -181,6 +207,7 @@ class CborScanner {
   private func scanArray(additional c: UInt8) throws -> CborValue {
     var a: [CborValue] = []
     if let n = try getLength(c: c) {
+      try requireContainerElementLimit(n)
       a.reserveCapacity(n)
       for _ in 0..<n {
         try a.append(scan())
@@ -192,6 +219,11 @@ class CborScanner {
         if case .literal(.break) = e {
           break
         }
+        if case .none = e {
+          throw DecodingError.dataCorrupted(
+            .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+        }
+        try requireContainerElementLimit(a.count + 1)
         a.append(e)
       }
     }
@@ -202,6 +234,7 @@ class CborScanner {
     var a: [CborValue] = []
     var previousKeyEncoding: Data?
     if let n = try getLength(c: c) {
+      try requireContainerElementLimit(n)
       a.reserveCapacity(n)
       for _ in 0..<n {
         let keyStart = off
@@ -226,6 +259,11 @@ class CborScanner {
         if case .literal(.break) = k {
           break
         }
+        if case .none = k {
+          throw DecodingError.dataCorrupted(
+            .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+        }
+        try requireContainerElementLimit(a.count / 2 + 1)
         try requireLexicographicallySortedMapKey(
           data[keyStart..<off], after: &previousKeyEncoding)
         if options.contains(.stringMapKeysOnly), !k.isTextString {
@@ -236,8 +274,13 @@ class CborScanner {
             ))
         }
         let v = try scan()
-        if case .literal(.break) = k {
-          break
+        if case .none = v {
+          throw DecodingError.dataCorrupted(
+            .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+        }
+        if case .literal(.break) = v {
+          throw DecodingError.dataCorrupted(
+            .init(codingPath: [], debugDescription: "CBOR map is missing a value."))
         }
         a.append(k)
         a.append(v)
@@ -321,9 +364,21 @@ class CborScanner {
       ))
   }
 
+  private func requireContainerElementLimit(_ count: Int) throws {
+    guard count <= limits.maximumContainerElements else {
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: [], debugDescription: "CBOR container element limit exceeded."))
+    }
+  }
+
   private func getLength(c: UInt8) throws -> Int? {
     guard c != 0x1F else { return nil }
-    return Int(truncatingIfNeeded: try _scanUInt(c: c))
+    let length = try _scanUInt(c: c)
+    guard let value = Int(exactly: length) else {
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: [], debugDescription: "CBOR length does not fit in Int."))
+    }
+    return value
   }
 
   private func _scanUInt(c: UInt8) throws -> UInt64 {
@@ -334,15 +389,16 @@ class CborScanner {
     let result: UInt64
     switch c {
     case 0x18:
-      result = UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))
+      result = UInt64(bigEndianFixedWidthInt(try read(1 << 0), as: UInt8.self))
     case 0x19:
-      result = UInt64(bigEndianFixedWidthInt(read(1 << 1), as: UInt16.self))
+      result = UInt64(bigEndianFixedWidthInt(try read(1 << 1), as: UInt16.self))
     case 0x1A:
-      result = UInt64(bigEndianFixedWidthInt(read(1 << 2), as: UInt32.self))
+      result = UInt64(bigEndianFixedWidthInt(try read(1 << 2), as: UInt32.self))
     case 0x1B:
-      result = bigEndianFixedWidthInt(read(1 << 3), as: UInt64.self)
+      result = bigEndianFixedWidthInt(try read(1 << 3), as: UInt64.self)
     default:
-      fatalError()
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: [], debugDescription: "Invalid CBOR additional information."))
     }
     if options.contains(.minimalArgumentEncoding) {
       try requireMinimalArgument(additional: c, value: result)
