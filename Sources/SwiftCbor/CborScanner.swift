@@ -73,6 +73,7 @@ class CborScanner {
   private func scanFloat(additional c: UInt8) throws -> CborValue {
     switch c {
     case 0x00...0x13:
+      if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(c) }
       return .literal(.simple(c))
     case 0x14:
       return .literal(.bool(false))
@@ -81,9 +82,12 @@ class CborScanner {
     case 0x16:
       return .literal(.nil)
     case 0x17:
+      if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(c) }
       return .literal(.undefined)
     case 0x18:
-      return .literal(.simple(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self)))
+      let value: UInt8 = bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self)
+      if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(value) }
+      return .literal(.simple(value))
     case 0x19:
       return .literal(.float16(read(1 << 1)))
     case 0x1A:
@@ -107,6 +111,14 @@ class CborScanner {
     default:
       return .none
     }
+  }
+
+  private func unsupportedSimpleValue(_ value: UInt8) -> DecodingError {
+    DecodingError.dataCorrupted(
+      .init(
+        codingPath: [],
+        debugDescription: "CBOR simple value \(value) is not false, true, or null."
+      ))
   }
 
   private func scanTaggedValue(additional c: UInt8) throws -> CborValue {

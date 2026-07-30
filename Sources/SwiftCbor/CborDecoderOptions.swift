@@ -11,6 +11,7 @@ extension CborDecoder {
     public static let lexicographicallySortedMapKeys = Options(rawValue: 1 << 2)
     public static let shortestFloatingPointEncoding = Options(rawValue: 1 << 3)
     public static let stringMapKeysOnly = Options(rawValue: 1 << 4)
+    public static let basicSimpleValuesOnly = Options(rawValue: 1 << 5)
 
     /// Validates the core deterministic encoding requirements in RFC 8949 Section 4.2.1.
     ///
