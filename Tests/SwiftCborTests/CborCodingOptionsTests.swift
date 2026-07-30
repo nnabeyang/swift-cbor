@@ -516,6 +516,38 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertThrowsError(try encoder.encode(Double.infinity))
   }
 
+  func testFloatingPointValuesDisallowedRejectsFloat16() {
+    let decoder = CborDecoder(options: .floatingPointValuesDisallowed)
+    XCTAssertThrowsError(try decoder.decode(Double.self, from: Data(hex: "f93e00")))
+  }
+
+  func testFloatingPointValuesDisallowedRejectsFloat32() {
+    let decoder = CborDecoder(options: .floatingPointValuesDisallowed)
+    XCTAssertThrowsError(try decoder.decode(Double.self, from: Data(hex: "fa3fc00000")))
+  }
+
+  func testFloatingPointValuesDisallowedRejectsFloat64() {
+    let decoder = CborDecoder(options: .floatingPointValuesDisallowed)
+    XCTAssertThrowsError(try decoder.decode(Double.self, from: Data(hex: "fb3ff8000000000000")))
+  }
+
+  func testFloatingPointValuesDisallowedAcceptsIntegers() throws {
+    let decoder = CborDecoder(options: .floatingPointValuesDisallowed)
+    XCTAssertEqual(try decoder.decode(Int.self, from: Data(hex: "01")), 1)
+  }
+
+  func testFloatingPointValuesDisallowedAcceptsBoolAndNull() throws {
+    let decoder = CborDecoder(options: .floatingPointValuesDisallowed)
+    XCTAssertEqual(try decoder.decode(Bool.self, from: Data(hex: "f4")), false)
+    XCTAssertEqual(try decoder.decode(Bool.self, from: Data(hex: "f5")), true)
+    XCTAssertNil(try decoder.decode(Int?.self, from: Data(hex: "f6")))
+  }
+
+  func testFloatingPointValuesDisallowedRejectsFloatNestedInArray() {
+    let decoder = CborDecoder(options: .floatingPointValuesDisallowed)
+    XCTAssertThrowsError(try decoder.decode([Double].self, from: Data(hex: "81f93e00")))
+  }
+
   func testAllowedTagsRestrictsTagsSymmetrically() throws {
     let valid = TestTaggedValue(tag: 42, payload: .bytes(Data([0, 1, 2])))
     let encoder = CborEncoder(allowedTags: [42])

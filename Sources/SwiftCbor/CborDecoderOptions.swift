@@ -16,6 +16,7 @@ extension CborDecoder {
     public static let floatingPoint64Only = Options(rawValue: 1 << 7)
     public static let validUTF8Only = Options(rawValue: 1 << 8)
     public static let singleTopLevelItem = Options(rawValue: 1 << 9)
+    public static let floatingPointValuesDisallowed = Options(rawValue: 1 << 10)
 
     var hasConflictingFloatingPointOptions: Bool {
       contains(.shortestFloatingPointEncoding) && contains(.floatingPoint64Only)
