@@ -16,6 +16,14 @@ open class CborDecoder {
   }
 
   open func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    guard !options.hasConflictingFloatingPointOptions else {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription:
+            "shortestFloatingPointEncoding and floatingPoint64Only cannot be combined."
+        ))
+    }
     let scanner = CborScanner(data: data, options: options)
     let value = try scanner.scan()
     let decoder: _CborDecoder = .init(from: value)

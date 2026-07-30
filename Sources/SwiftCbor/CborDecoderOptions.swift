@@ -13,6 +13,11 @@ extension CborDecoder {
     public static let stringMapKeysOnly = Options(rawValue: 1 << 4)
     public static let basicSimpleValuesOnly = Options(rawValue: 1 << 5)
     public static let finiteFloatingPointValuesOnly = Options(rawValue: 1 << 6)
+    public static let floatingPoint64Only = Options(rawValue: 1 << 7)
+
+    var hasConflictingFloatingPointOptions: Bool {
+      contains(.shortestFloatingPointEncoding) && contains(.floatingPoint64Only)
+    }
 
     /// Validates the core deterministic encoding requirements in RFC 8949 Section 4.2.1.
     ///

@@ -12,6 +12,15 @@ open class CborEncoder {
   }
 
   open func encode(_ value: some Encodable) throws -> Data {
+    guard !options.hasConflictingFloatingPointOptions else {
+      throw EncodingError.invalidValue(
+        value,
+        .init(
+          codingPath: [],
+          debugDescription:
+            "shortestFloatingPointEncoding and floatingPoint64Only cannot be combined."
+        ))
+    }
     let value: CborEncodedValue = try encodeAsCborValue(value)
     let writer = CborValue.Writer(
       sortMapKeysLexicographically: options.contains(.lexicographicallySortedMapKeys)
@@ -282,6 +291,9 @@ extension _SpecialTreatmentEncoder {
     }
     if encoder.options.contains(.shortestFloatingPointEncoding) {
       return shortestFloatingPointValue(value)
+    }
+    if encoder.options.contains(.floatingPoint64Only) {
+      return .literal([0xFB] + Double(value).bytes)
     }
     let bits = value.bytes
     if bits.count == 2 {
