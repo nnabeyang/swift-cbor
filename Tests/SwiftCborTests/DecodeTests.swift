@@ -181,6 +181,31 @@ final class DecodeTests: XCTestCase {
       try decoder.decode(TaggedUserInfoValue.self, from: Data(hex: "c100")),
       TaggedUserInfoValue(value: "context"))
   }
+
+  func testDecodePrefixReturnsValueAndConsumedByteCount() throws {
+    let data = Data(hex: "a161610102")
+    let result = try decoder.decodePrefix([String: Int].self, from: data)
+
+    XCTAssertEqual(result.value, ["a": 1])
+    XCTAssertEqual(result.bytesConsumed, 4)
+  }
+
+  func testDecodePrefixReportsConsumedBytesRelativeToDataSlice() throws {
+    let data = Data(hex: "000102").dropFirst()
+    let result = try decoder.decodePrefix(Int.self, from: data)
+
+    XCTAssertEqual(result.value, 1)
+    XCTAssertEqual(result.bytesConsumed, 1)
+  }
+
+  func testDecodePrefixAllowsTrailingDataWithSingleTopLevelItemOption() throws {
+    let decoder = CborDecoder(options: .singleTopLevelItem)
+    let result = try decoder.decodePrefix(Int.self, from: Data(hex: "0102"))
+
+    XCTAssertEqual(result.value, 1)
+    XCTAssertEqual(result.bytesConsumed, 1)
+    XCTAssertThrowsError(try decoder.decode(Int.self, from: Data(hex: "0102")))
+  }
 }
 
 extension CodingUserInfoKey {

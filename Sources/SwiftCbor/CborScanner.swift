@@ -7,7 +7,7 @@ class CborScanner {
   let options: CborDecoder.Options
   let allowedTags: Set<UInt64>?
   let limits: CborDecoder.Limits
-  var isAtEnd: Bool { off == data.endIndex }
+  var consumedByteCount: Int { off - data.startIndex }
 
   init(
     data: Data, options: CborDecoder.Options = [], allowedTags: Set<UInt64>? = nil,

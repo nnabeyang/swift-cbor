@@ -39,6 +39,20 @@ open class CborDecoder {
   }
 
   open func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    let result: (value: T, bytesConsumed: Int) = try decodePrefix(type, from: data)
+    if options.contains(.singleTopLevelItem), result.bytesConsumed != data.count {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription: "CBOR input contains bytes after the top-level item."
+        ))
+    }
+    return result.value
+  }
+
+  open func decodePrefix<T: Decodable>(
+    _ type: T.Type, from data: Data
+  ) throws -> (value: T, bytesConsumed: Int) {
     guard !options.hasConflictingFloatingPointOptions else {
       throw DecodingError.dataCorrupted(
         .init(
@@ -50,16 +64,9 @@ open class CborDecoder {
     let scanner = CborScanner(
       data: data, options: options, allowedTags: allowedTags, limits: limits)
     let value = try scanner.scan()
-    if options.contains(.singleTopLevelItem), !scanner.isAtEnd {
-      throw DecodingError.dataCorrupted(
-        .init(
-          codingPath: [],
-          debugDescription: "CBOR input contains bytes after the top-level item."
-        ))
-    }
     let decoder: _CborDecoder = .init(from: value, userInfo: userInfo)
     do {
-      return try decoder.unwrap(as: T.self)
+      return (try decoder.unwrap(as: T.self), scanner.consumedByteCount)
     } catch {
       if let error = error as? CborDecodingError {
         throw error.asDecodingError(type, codingPath: [])
