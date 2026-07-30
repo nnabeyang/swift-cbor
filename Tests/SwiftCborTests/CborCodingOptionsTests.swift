@@ -628,6 +628,40 @@ final class CborCodingOptionsTests: XCTestCase {
     let decoder = CborDecoder(options: .singleTopLevelItem)
     XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "9f01ff00")))
   }
+
+  func testDecoderLimitsRejectExcessiveNesting() throws {
+    let decoder = CborDecoder(limits: .init(maximumNestingDepth: 2))
+
+    XCTAssertThrowsError(try decoder.decode([[Int]].self, from: Data(hex: "818100")))
+    decoder.limits.maximumNestingDepth = 3
+    XCTAssertEqual(try decoder.decode([[Int]].self, from: Data(hex: "818100")), [[0]])
+  }
+
+  func testDecoderLimitsRejectOversizedContainers() {
+    let decoder = CborDecoder(limits: .init(maximumContainerElements: 1))
+
+    XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "820001")))
+    XCTAssertThrowsError(
+      try decoder.decode([String: Int].self, from: Data(hex: "a2616100616201")))
+    XCTAssertThrowsError(try decoder.decode([Int].self, from: Data(hex: "9f0001ff")))
+  }
+
+  func testDecoderLimitsRejectOversizedStrings() throws {
+    let decoder = CborDecoder(limits: .init(maximumStringBytes: 2))
+
+    XCTAssertThrowsError(try decoder.decode(Data.self, from: Data(hex: "43000102")))
+    XCTAssertThrowsError(try decoder.decode(Data.self, from: Data(hex: "5f000102ff")))
+    XCTAssertEqual(try decoder.decode(Data.self, from: Data(hex: "420001")), Data(hex: "0001"))
+  }
+
+  func testDecoderRejectsTruncatedInputInsteadOfTrapping() {
+    XCTAssertThrowsError(
+      try CborDecoder().decode(Data.self, from: Data(hex: "5a0000000401")))
+    XCTAssertThrowsError(try CborDecoder().decode(Data.self, from: Data(hex: "5f0001")))
+    XCTAssertThrowsError(try CborDecoder().decode([Int].self, from: Data(hex: "9f00")))
+    XCTAssertThrowsError(
+      try CborDecoder().decode([String: Int].self, from: Data(hex: "bf6161")))
+  }
 }
 
 private struct TestTaggedValue: CborEncodable {
