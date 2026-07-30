@@ -84,6 +84,10 @@ class CborScanner {
   }
 
   private func scanFloat(additional c: UInt8) throws -> CborValue {
+    if options.contains(.floatingPointValuesDisallowed), (0x19...0x1B).contains(c) {
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: [], debugDescription: "Floating-point values are not permitted."))
+    }
     switch c {
     case 0x00...0x13:
       if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(c) }
