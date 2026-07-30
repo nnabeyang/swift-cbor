@@ -163,6 +163,55 @@ final class DecodeTests: XCTestCase {
 
     XCTAssertEqual(try decoder.decode(Inner.self, from: decodedOuter.inner), Inner(value: 7))
   }
+
+  func testUserInfoIsAvailableToTopLevelAndNestedValues() throws {
+    let decoder = CborDecoder()
+    decoder.userInfo[.testValue] = "context"
+
+    XCTAssertEqual(
+      try decoder.decode(UserInfoValue.self, from: Data(hex: "00")),
+      UserInfoValue(value: "context"))
+    XCTAssertEqual(
+      try decoder.decode([String: UserInfoValue].self, from: Data(hex: "a1616100")),
+      ["a": UserInfoValue(value: "context")])
+    XCTAssertEqual(
+      try decoder.decode([UserInfoValue].self, from: Data(hex: "8100")),
+      [UserInfoValue(value: "context")])
+    XCTAssertEqual(
+      try decoder.decode(TaggedUserInfoValue.self, from: Data(hex: "c100")),
+      TaggedUserInfoValue(value: "context"))
+  }
+}
+
+extension CodingUserInfoKey {
+  fileprivate static let testValue = CodingUserInfoKey(rawValue: "testValue")!
+}
+
+private struct UserInfoValue: Decodable, Equatable {
+  let value: String
+
+  init(value: String) {
+    self.value = value
+  }
+
+  init(from decoder: Decoder) throws {
+    _ = try decoder.singleValueContainer().decode(Int.self)
+    value = try XCTUnwrap(decoder.userInfo[.testValue] as? String)
+  }
+}
+
+private struct TaggedUserInfoValue: CborDecodable, Equatable {
+  let value: String
+  var tag: UInt64 { 1 }
+
+  init(value: String) {
+    self.value = value
+  }
+
+  init(from decoder: Decoder) throws {
+    _ = try decoder.singleValueContainer().decode(Int.self)
+    value = try XCTUnwrap(decoder.userInfo[.testValue] as? String)
+  }
 }
 
 extension UnicodeScalar {

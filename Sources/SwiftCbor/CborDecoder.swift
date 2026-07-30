@@ -12,6 +12,7 @@ open class CborDecoder {
   public var options: Options
   public var allowedTags: Set<UInt64>?
   public var limits: Limits
+  public var userInfo: [CodingUserInfoKey: Any] = [:]
 
   public struct Limits: Sendable {
     public var maximumNestingDepth: Int
@@ -56,7 +57,7 @@ open class CborDecoder {
           debugDescription: "CBOR input contains bytes after the top-level item."
         ))
     }
-    let decoder: _CborDecoder = .init(from: value)
+    let decoder: _CborDecoder = .init(from: value, userInfo: userInfo)
     do {
       return try decoder.unwrap(as: T.self)
     } catch {
@@ -73,9 +74,13 @@ private class _CborDecoder: Decoder {
   var value: CborValue
   var userInfo: [CodingUserInfoKey: Any] = [:]
 
-  init(from value: CborValue, at codingPath: [CodingKey] = []) {
+  init(
+    from value: CborValue, at codingPath: [CodingKey] = [],
+    userInfo: [CodingUserInfoKey: Any] = [:]
+  ) {
     self.value = value
     self.codingPath = codingPath
+    self.userInfo = userInfo
   }
 
   func container<Key>(keyedBy _: Key.Type) throws -> KeyedDecodingContainer<Key>
@@ -427,7 +432,7 @@ extension _CborDecoder {
         CborDecodable.self, DecodingError.Context(codingPath: codingPath, debugDescription: ""))
     }
     let tag = try unboxUInt64(.literal(tagData))
-    let value = try type.init(from: _CborDecoder(from: cborValue))
+    let value = try type.init(from: _CborDecoder(from: cborValue, userInfo: userInfo))
     guard value.tag == tag else {
       throw DecodingError.dataCorrupted(
         DecodingError.Context(
@@ -680,7 +685,7 @@ private struct CborUnkeyedUnkeyedDecodingContainer: UnkeyedDecodingContainer {
   private mutating func decoderForNextElement<T>(ofType _: T.Type) throws -> _CborDecoder {
     let value = try getNextValue(ofType: T.self)
     let newPath = codingPath + [CborKey(index: currentIndex)]
-    return _CborDecoder(from: value, at: newPath)
+    return _CborDecoder(from: value, at: newPath, userInfo: decoder.userInfo)
   }
 
   @inline(__always)
@@ -938,7 +943,7 @@ private struct CborKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
   private func decoderForKey(_ key: some CodingKey) throws -> _CborDecoder {
     let value = try getValue(forKey: key)
     let newPath: [CodingKey] = codingPath + [key]
-    return _CborDecoder(from: value, at: newPath)
+    return _CborDecoder(from: value, at: newPath, userInfo: decoder.userInfo)
   }
 
   @inline(__always)
