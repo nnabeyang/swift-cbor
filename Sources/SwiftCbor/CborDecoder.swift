@@ -12,8 +12,6 @@ open class CborDecoder {
   public var options: Options
   public var allowedTags: Set<UInt64>?
 
-  public static let dagCborAllowedTags: Set<UInt64> = [42]
-
   public init(options: Options = [], allowedTags: Set<UInt64>? = nil) {
     self.options = options
     self.allowedTags = allowedTags
