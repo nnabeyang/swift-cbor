@@ -553,6 +553,16 @@ final class CborCodingOptionsTests: XCTestCase {
     XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a01")))
     XCTAssertThrowsError(try decoder.decode(TestBytesLink.self, from: Data(hex: "d82a4101")))
   }
+
+  func testValidUTF8OnlyRejectsIllFormedText() {
+    let decoder = CborDecoder(options: .validUTF8Only)
+    XCTAssertThrowsError(try decoder.decode(String.self, from: Data(hex: "61ff")))
+  }
+
+  func testValidUTF8OnlyAcceptsValidText() throws {
+    let decoder = CborDecoder(options: .validUTF8Only)
+    XCTAssertEqual(try decoder.decode(String.self, from: Data(hex: "63e38182")), "あ")
+  }
 }
 
 private struct TestTaggedValue: CborEncodable {
