@@ -1,7 +1,9 @@
 import Foundation
 
-enum CborValueLiteralType {
+enum CborValueLiteralType: Sendable {
   case `nil`
+  case undefined
+  case simple(UInt8)
   case `break`
   case bool(Bool)
   case int(UInt64)
@@ -18,6 +20,10 @@ extension CborValueLiteralType {
     switch self {
     case .nil:
       "nil"
+    case .undefined:
+      "undefined"
+    case .simple:
+      "simple"
     case .break:
       "break"
     case .bool:
@@ -81,7 +87,7 @@ struct CborStringKey {
   let CborValue: CborEncodedValue
 }
 
-indirect enum CborValue {
+indirect enum CborValue: Sendable {
   case none
   case literal(CborValueLiteralType)
   case array([CborValue])

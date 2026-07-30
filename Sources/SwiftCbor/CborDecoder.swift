@@ -79,13 +79,16 @@ private class _CborDecoder: Decoder {
 extension _CborDecoder {
   @inline(__always)
   fileprivate func checkNotNull<T>(_ type: CborValueLiteralType, expectedType: T.Type) throws {
-    if case .nil = type {
+    switch type {
+    case .nil, .undefined:
       throw DecodingError.valueNotFound(
         expectedType,
         DecodingError.Context(
           codingPath: codingPath,
           debugDescription: "Cannot get value of type \(expectedType) -- found null value instead"
         ))
+    default:
+      break
     }
   }
 
@@ -439,9 +442,10 @@ private struct _CborSingleValueDecodingContainer: SingleValueDecodingContainer {
   }
 
   func decodeNil() -> Bool {
-    if case .literal(.nil) = value {
+    switch value {
+    case .literal(.nil), .literal(.undefined):
       true
-    } else {
+    default:
       false
     }
   }
@@ -530,11 +534,13 @@ private struct CborUnkeyedUnkeyedDecodingContainer: UnkeyedDecodingContainer {
 
   mutating func decodeNil() throws -> Bool {
     let value = try getNextValue(ofType: Never.self)
-    if case .literal(.nil) = value {
+    switch value {
+    case .literal(.nil), .literal(.undefined):
       currentIndex += 1
       return true
+    default:
+      return false
     }
-    return false
   }
 
   mutating func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type) throws
@@ -795,9 +801,10 @@ private struct CborKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
 
   func decodeNil(forKey key: Key) throws -> Bool {
     let value = try getValue(forKey: key)
-    if case .literal(.nil) = value {
+    switch value {
+    case .literal(.nil), .literal(.undefined):
       return true
-    } else {
+    default:
       return false
     }
   }
