@@ -391,4 +391,15 @@ final class CborCodingOptionsTests: XCTestCase {
     let decoder = CborDecoder(options: .stringMapKeysOnly)
     XCTAssertEqual(try decoder.decode([String: Int].self, from: Data(hex: "a1616101")), ["a": 1])
   }
+
+  func testMajorType7SimpleValuesAreNotIntegers() {
+    let decoder = CborDecoder()
+    XCTAssertThrowsError(try decoder.decode(Int.self, from: Data(hex: "f0")))
+    XCTAssertThrowsError(try decoder.decode(Int.self, from: Data(hex: "f3")))
+    XCTAssertThrowsError(try decoder.decode(Int.self, from: Data(hex: "f820")))
+  }
+
+  func testDefaultDecoderKeepsUndefinedAsNull() throws {
+    XCTAssertNil(try CborDecoder().decode(String?.self, from: Data(hex: "f7")))
+  }
 }

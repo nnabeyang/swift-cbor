@@ -2,6 +2,8 @@ import Foundation
 
 enum CborValueLiteralType {
   case `nil`
+  case undefined
+  case simple(UInt8)
   case `break`
   case bool(Bool)
   case int(UInt64)
@@ -18,6 +20,10 @@ extension CborValueLiteralType {
     switch self {
     case .nil:
       "nil"
+    case .undefined:
+      "undefined"
+    case .simple:
+      "simple"
     case .break:
       "break"
     case .bool:

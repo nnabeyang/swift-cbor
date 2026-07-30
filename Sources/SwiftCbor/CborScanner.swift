@@ -73,15 +73,17 @@ class CborScanner {
   private func scanFloat(additional c: UInt8) throws -> CborValue {
     switch c {
     case 0x00...0x13:
-      return .literal(.uint(UInt64(c)))
+      return .literal(.simple(c))
     case 0x14:
       return .literal(.bool(false))
     case 0x15:
       return .literal(.bool(true))
-    case 0x16, 0x17:
+    case 0x16:
       return .literal(.nil)
+    case 0x17:
+      return .literal(.undefined)
     case 0x18:
-      return .literal(.uint(UInt64(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self))))
+      return .literal(.simple(bigEndianFixedWidthInt(read(1 << 0), as: UInt8.self)))
     case 0x19:
       return .literal(.float16(read(1 << 1)))
     case 0x1A:
