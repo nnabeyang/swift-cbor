@@ -1,6 +1,6 @@
 import Foundation
 
-enum CborValueLiteralType {
+enum CborValueLiteralType: Sendable {
   case `nil`
   case undefined
   case simple(UInt8)
@@ -87,7 +87,7 @@ struct CborStringKey {
   let CborValue: CborEncodedValue
 }
 
-indirect enum CborValue {
+indirect enum CborValue: Sendable {
   case none
   case literal(CborValueLiteralType)
   case array([CborValue])
