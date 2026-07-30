@@ -271,6 +271,15 @@ extension _SpecialTreatmentEncoder {
   fileprivate func wrapFloat<F: BinaryFloatingPoint & DataNumber>(
     _ value: F, for additionalKey: CodingKey?
   ) throws -> CborEncodedValue {
+    if encoder.options.contains(.finiteFloatingPointValuesOnly), !value.isFinite {
+      let path = additionalKey.map { codingPath + [$0] } ?? codingPath
+      throw EncodingError.invalidValue(
+        value,
+        .init(
+          codingPath: path,
+          debugDescription: "Non-finite floating-point values are not permitted."
+        ))
+    }
     if encoder.options.contains(.shortestFloatingPointEncoding) {
       return shortestFloatingPointValue(value)
     }

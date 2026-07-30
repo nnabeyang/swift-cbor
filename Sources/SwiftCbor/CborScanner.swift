@@ -89,13 +89,23 @@ class CborScanner {
       if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(value) }
       return .literal(.simple(value))
     case 0x19:
-      return .literal(.float16(read(1 << 1)))
+      let bytes = read(1 << 1)
+      if options.contains(.finiteFloatingPointValuesOnly), try !Float16(data: bytes).isFinite {
+        throw nonFiniteFloatError()
+      }
+      return .literal(.float16(bytes))
     case 0x1A:
       let bytes = read(1 << 2)
+      if options.contains(.finiteFloatingPointValuesOnly), try !Float(data: bytes).isFinite {
+        throw nonFiniteFloatError()
+      }
       try requireShortestFloatingPointEncoding(bytes, as: Float.self)
       return .literal(.float32(bytes))
     case 0x1B:
       let bytes = read(1 << 3)
+      if options.contains(.finiteFloatingPointValuesOnly), try !Double(data: bytes).isFinite {
+        throw nonFiniteFloatError()
+      }
       try requireShortestFloatingPointEncoding(bytes, as: Double.self)
       return .literal(.float64(bytes))
     case 0x1F:
@@ -118,6 +128,14 @@ class CborScanner {
       .init(
         codingPath: [],
         debugDescription: "CBOR simple value \(value) is not false, true, or null."
+      ))
+  }
+
+  private func nonFiniteFloatError() -> DecodingError {
+    DecodingError.dataCorrupted(
+      .init(
+        codingPath: [],
+        debugDescription: "Non-finite floating-point values are not permitted."
       ))
   }
 
