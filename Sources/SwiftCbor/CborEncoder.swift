@@ -434,6 +434,17 @@ extension _SpecialTreatmentEncoder {
     try CborMapKey(identity: .string(value), encoded: wrapString(value, for: key))
   }
 
+  fileprivate func wrapIntKey(_ value: Int, for key: CodingKey?) throws -> CborMapKey {
+    try CborMapKey(identity: .int(value), encoded: wrapInt(value, for: key))
+  }
+
+  fileprivate func wrapKey(for codingKey: CodingKey) throws -> CborMapKey {
+    if let intValue = codingKey.intValue {
+      return try wrapIntKey(intValue, for: codingKey)
+    }
+    return try wrapStringKey(codingKey.stringValue, for: codingKey)
+  }
+
   fileprivate func wrapString(_ value: String, for _: CodingKey?) throws -> CborEncodedValue {
     let data = Data(value.utf8)
     let majorType: UInt8 = 0b0110_0000
@@ -755,17 +766,17 @@ private struct CborKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
   }
 
   func encodeNil(forKey key: Key) throws {
-    try map.set(.Nil, for: encoder.wrapStringKey(key.stringValue, for: key))
+    try map.set(.Nil, for: encoder.wrapKey(for: key))
   }
 
   func encode(_ value: Bool, forKey key: Key) throws {
     let value = encoder.wrapBool(value)
-    try map.set(value, for: encoder.wrapStringKey(key.stringValue, for: key))
+    try map.set(value, for: encoder.wrapKey(for: key))
   }
 
   func encode(_ value: String, forKey key: Key) throws {
     let value = try encoder.wrapString(value, for: key)
-    try map.set(value, for: encoder.wrapStringKey(key.stringValue, for: key))
+    try map.set(value, for: encoder.wrapKey(for: key))
   }
 
   func encode(_ value: Double, forKey key: Key) throws {
@@ -818,7 +829,7 @@ private struct CborKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
 
   func encode(_ value: some Encodable, forKey key: Key) throws {
     let encoded = try encoder.wrapEncodable(value, for: key)
-    try map.set(encoded ?? .Nil, for: encoder.wrapStringKey(key.stringValue, for: key))
+    try map.set(encoded ?? .Nil, for: encoder.wrapKey(for: key))
   }
 
   func nestedContainer<NestedKey>(keyedBy _: NestedKey.Type, forKey key: Key)
@@ -826,7 +837,7 @@ private struct CborKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
   {
     let newPath = codingPath + [key]
     let map: CborFuture.RefMap = map.setMap(
-      for: try! encoder.wrapStringKey(key.stringValue, for: key))
+      for: try! encoder.wrapKey(for: key))
     let nestedContainer = CborKeyedEncodingContainer<NestedKey>(
       referencing: encoder, map: map, codingPath: newPath)
     return KeyedEncodingContainer(nestedContainer)
@@ -835,7 +846,7 @@ private struct CborKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
   func nestedUnkeyedContainer(forKey key: Self.Key) -> UnkeyedEncodingContainer {
     let newPath = codingPath + [key]
     let array: CborFuture.RefArray = map.setArray(
-      for: try! encoder.wrapStringKey(key.stringValue, for: key))
+      for: try! encoder.wrapKey(for: key))
     let nestedContainer = CborUnkeyedEncodingContainer(
       referencing: encoder, array: array, codingPath: newPath)
     return nestedContainer
@@ -849,24 +860,24 @@ private struct CborKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
 
   func superEncoder(forKey key: Key) -> Encoder {
     let newEncoder = encoder.getEncoder(for: key)
-    map.set(newEncoder, for: try! encoder.wrapStringKey(key.stringValue, for: key))
+    map.set(newEncoder, for: try! encoder.wrapKey(for: key))
     return newEncoder
   }
 
   private func encodeFloat(_ value: some BinaryFloatingPoint & DataNumber, for key: Key) throws {
     let value = try encoder.wrapFloat(value, for: nil)
-    try map.set(value, for: encoder.wrapStringKey(key.stringValue, for: key))
+    try map.set(value, for: encoder.wrapKey(for: key))
   }
 
   private func encodeInt(_ value: some SignedInteger & FixedWidthInteger, for key: Key) throws {
     let value = try encoder.wrapInt(value, for: key)
-    try map.set(value, for: encoder.wrapStringKey(key.stringValue, for: key))
+    try map.set(value, for: encoder.wrapKey(for: key))
   }
 
   private func encodeUInt(_ value: some UnsignedInteger & FixedWidthInteger, forKey key: Key) throws
   {
     let value = try encoder.wrapUInt(value, for: key)
-    try map.set(value, for: encoder.wrapStringKey(key.stringValue, for: key))
+    try map.set(value, for: encoder.wrapKey(for: key))
   }
 }
 
