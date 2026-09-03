@@ -101,7 +101,7 @@ private class _CborDecoder: Decoder {
             "Expected to decode \([String: Any].self) but found \(value.debugDataTypeDescription) instead."
         ))
     }
-    return KeyedDecodingContainer(
+    return try KeyedDecodingContainer(
       CborKeyedDecodingContainer<Key>(referencing: self, container: value))
   }
 
@@ -817,25 +817,35 @@ private struct CborKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
   private(set) var codingPath: [CodingKey]
   private var container: [String: CborValue]
 
-  static func asDictionary(value CborValue: CborValue, using decoder: _CborDecoder) -> [String:
-    CborValue]
+  static func asDictionary(value CborValue: CborValue, using decoder: _CborDecoder) throws
+    -> [String: CborValue]
   {
     var result: [String: CborValue] = [:]
     let a = CborValue.asDictionary()
     result.reserveCapacity(a.count)
     for (keyvalue, value) in a {
-      guard let key = try? decoder.unbox(keyvalue, as: String.self) else {
-        continue
+      let key: String
+      do {
+        key = try decoder.unbox(keyvalue, as: String.self)
+      } catch {
+        throw DecodingError.dataCorrupted(
+          DecodingError.Context(
+            codingPath: decoder.codingPath,
+            debugDescription:
+              "CBOR map key of type \(keyvalue.debugDataTypeDescription) is not representable as a Swift CodingKey."
+          ))
       }
-      result[key]._setIfNil(to: value)
+      if result[key] == nil {
+        result[key] = value
+      }
     }
 
     return result
   }
 
-  init(referencing decoder: _CborDecoder, container: CborValue) {
+  init(referencing decoder: _CborDecoder, container: CborValue) throws {
     self.decoder = decoder
-    self.container = Self.asDictionary(value: container, using: decoder)
+    self.container = try Self.asDictionary(value: container, using: decoder)
     codingPath = decoder.codingPath
   }
 
@@ -1113,12 +1123,5 @@ extension CborDecodingError {
         codingPath: codingPath, debugDescription: "Expected to decode \(type) but it failed")
       return DecodingError.dataCorrupted(context)
     }
-  }
-}
-
-extension Optional {
-  fileprivate mutating func _setIfNil(to value: Wrapped) {
-    guard _fastPath(self == nil) else { return }
-    self = value
   }
 }
