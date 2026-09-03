@@ -101,7 +101,7 @@ private class _CborDecoder: Decoder {
             "Expected to decode \([String: Any].self) but found \(value.debugDataTypeDescription) instead."
         ))
     }
-    return KeyedDecodingContainer(
+    return try KeyedDecodingContainer(
       CborKeyedDecodingContainer<Key>(referencing: self, container: value))
   }
 
@@ -815,38 +815,87 @@ private struct CborKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
 
   private let decoder: _CborDecoder
   private(set) var codingPath: [CodingKey]
-  private var container: [String: CborValue]
+  private var container: [CborMapKey.Identity: CborValue]
+  private var orderedIdentities: [CborMapKey.Identity]
 
-  static func asDictionary(value CborValue: CborValue, using decoder: _CborDecoder) -> [String:
-    CborValue]
+  static func asDictionary(value CborValue: CborValue, using decoder: _CborDecoder) throws
+    -> (dict: [CborMapKey.Identity: CborValue], order: [CborMapKey.Identity])
   {
-    var result: [String: CborValue] = [:]
+    var dict: [CborMapKey.Identity: CborValue] = [:]
+    var order: [CborMapKey.Identity] = []
     let a = CborValue.asDictionary()
-    result.reserveCapacity(a.count)
+    dict.reserveCapacity(a.count)
+    order.reserveCapacity(a.count)
     for (keyvalue, value) in a {
-      guard let key = try? decoder.unbox(keyvalue, as: String.self) else {
-        continue
+      let identity: CborMapKey.Identity
+      switch keyvalue {
+      case .literal(.uint(let u)):
+        guard let i = Int(exactly: u) else {
+          throw DecodingError.dataCorrupted(
+            DecodingError.Context(
+              codingPath: decoder.codingPath,
+              debugDescription:
+                "CBOR map integer key \(u) is not representable as a Swift Int."
+            ))
+        }
+        identity = .int(i)
+      case .literal(.int(let u)):
+        guard let asInt = Int(exactly: u) else {
+          throw DecodingError.dataCorrupted(
+            DecodingError.Context(
+              codingPath: decoder.codingPath,
+              debugDescription:
+                "CBOR map negative-integer key overflows Swift Int."
+            ))
+        }
+        identity = .int(-1 - asInt)
+      case .literal(.str(let bytes)):
+        identity = .string(String(decoding: bytes, as: UTF8.self))
+      default:
+        throw DecodingError.dataCorrupted(
+          DecodingError.Context(
+            codingPath: decoder.codingPath,
+            debugDescription:
+              "CBOR map key of type \(keyvalue.debugDataTypeDescription) is not representable as a Swift CodingKey."
+          ))
       }
-      result[key]._setIfNil(to: value)
+      if dict[identity] == nil {
+        order.append(identity)
+        dict[identity] = value
+      }
     }
-
-    return result
+    return (dict, order)
   }
 
-  init(referencing decoder: _CborDecoder, container: CborValue) {
+  init(referencing decoder: _CborDecoder, container: CborValue) throws {
     self.decoder = decoder
-    self.container = Self.asDictionary(value: container, using: decoder)
+    let resolved = try Self.asDictionary(value: container, using: decoder)
+    self.container = resolved.dict
+    orderedIdentities = resolved.order
     codingPath = decoder.codingPath
   }
 
   var allKeys: [Key] {
-    container.keys.compactMap {
-      Key(stringValue: $0)
+    orderedIdentities.compactMap { identity in
+      switch identity {
+      case .int(let i):
+        return Key(intValue: i) ?? Key(stringValue: String(i))
+      case .string(let s):
+        return Key(stringValue: s)
+      }
     }
   }
 
   func contains(_ key: Key) -> Bool {
-    container[key.stringValue] != nil
+    lookup(for: key) != nil
+  }
+
+  @inline(__always)
+  private func lookup(for key: some CodingKey) -> CborValue? {
+    if let intValue = key.intValue, let value = container[.int(intValue)] {
+      return value
+    }
+    return container[.string(key.stringValue)]
   }
 
   func decodeNil(forKey key: Key) throws -> Bool {
@@ -955,7 +1004,7 @@ private struct CborKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
 
   @inline(__always)
   private func getValue<LocalKey: CodingKey>(forKey key: LocalKey) throws -> CborValue {
-    guard let value = container[key.stringValue] else {
+    guard let value = lookup(for: key) else {
       let context = DecodingError.Context(
         codingPath: codingPath,
         debugDescription: "No value assosiated with key \(key) (\"\(key.stringValue)\"")
@@ -1113,12 +1162,5 @@ extension CborDecodingError {
         codingPath: codingPath, debugDescription: "Expected to decode \(type) but it failed")
       return DecodingError.dataCorrupted(context)
     }
-  }
-}
-
-extension Optional {
-  fileprivate mutating func _setIfNil(to value: Wrapped) {
-    guard _fastPath(self == nil) else { return }
-    self = value
   }
 }
