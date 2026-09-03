@@ -82,9 +82,14 @@ extension CborEncodedValue {
   }
 }
 
-struct CborStringKey {
-  let stringValue: String
-  let CborValue: CborEncodedValue
+struct CborMapKey {
+  enum Identity: Hashable {
+    case string(String)
+    case int(Int)
+  }
+
+  let identity: Identity
+  let encoded: CborEncodedValue
 }
 
 indirect enum CborValue: Sendable {

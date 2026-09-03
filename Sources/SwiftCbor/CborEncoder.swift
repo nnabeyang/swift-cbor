@@ -169,32 +169,32 @@ private enum CborFuture {
   }
 
   class RefMap {
-    private(set) var keys: [CborStringKey] = []
-    private(set) var dict: [String: CborFuture] = [:]
+    private(set) var keys: [CborMapKey] = []
+    private(set) var dict: [CborMapKey.Identity: CborFuture] = [:]
     init() {
       dict.reserveCapacity(20)
     }
 
     @inline(__always)
-    func set(_ value: CborEncodedValue, for key: CborStringKey) {
-      if dict[key.stringValue] == nil {
+    func set(_ value: CborEncodedValue, for key: CborMapKey) {
+      if dict[key.identity] == nil {
         keys.append(key)
       }
-      dict[key.stringValue] = .value(value)
+      dict[key.identity] = .value(value)
     }
 
     @inline(__always)
-    func setArray(for key: CborStringKey) -> RefArray {
-      switch dict[key.stringValue] {
+    func setArray(for key: CborMapKey) -> RefArray {
+      switch dict[key.identity] {
       case .nestedArray(let array):
         return array
       case .value:
         let array: CborFuture.RefArray = .init()
-        dict[key.stringValue] = .nestedArray(array)
+        dict[key.identity] = .nestedArray(array)
         return array
       case .none:
         let array: CborFuture.RefArray = .init()
-        dict[key.stringValue] = .nestedArray(array)
+        dict[key.identity] = .nestedArray(array)
         keys.append(key)
         return array
       case .nestedMap:
@@ -205,17 +205,17 @@ private enum CborFuture {
     }
 
     @inline(__always)
-    func setMap(for key: CborStringKey) -> RefMap {
-      switch dict[key.stringValue] {
+    func setMap(for key: CborMapKey) -> RefMap {
+      switch dict[key.identity] {
       case .nestedMap(let map):
         return map
       case .value:
         let map: CborFuture.RefMap = .init()
-        dict[key.stringValue] = .nestedMap(map)
+        dict[key.identity] = .nestedMap(map)
         return map
       case .none:
         let map: CborFuture.RefMap = .init()
-        dict[key.stringValue] = .nestedMap(map)
+        dict[key.identity] = .nestedMap(map)
         keys.append(key)
         return map
       case .nestedArray:
@@ -226,8 +226,8 @@ private enum CborFuture {
     }
 
     @inline(__always)
-    func set(_ encoder: _CborEncoder, for key: CborStringKey) {
-      switch dict[key.stringValue] {
+    func set(_ encoder: _CborEncoder, for key: CborMapKey) {
+      switch dict[key.identity] {
       case .encoder:
         preconditionFailure("For key \"\(key)\" an encoder has already been created.")
       case .nestedMap:
@@ -235,20 +235,20 @@ private enum CborFuture {
       case .nestedArray:
         preconditionFailure("For key \"\(key)\" a unkeyed container has already been created.")
       case .value:
-        dict[key.stringValue] = .encoder(encoder)
+        dict[key.identity] = .encoder(encoder)
       case .none:
-        dict[key.stringValue] = .encoder(encoder)
+        dict[key.identity] = .encoder(encoder)
         keys.append(key)
       }
     }
 
     var values: [(CborEncodedValue, CborEncodedValue)] {
       keys.compactMap {
-        switch dict[$0.stringValue] {
+        switch dict[$0.identity] {
         case .value(let value):
-          return ($0.CborValue, value)
+          return ($0.encoded, value)
         case .nestedArray(let array):
-          return ($0.CborValue, .array(array.values))
+          return ($0.encoded, .array(array.values))
         case .nestedMap(let map):
           var a: [CborEncodedValue] = []
           let values = map.values
@@ -257,12 +257,12 @@ private enum CborFuture {
             a.append(k)
             a.append(v)
           }
-          return ($0.CborValue, .map(a))
+          return ($0.encoded, .map(a))
         case .encoder(let encoder):
           guard let value = encoder.value else {
             return nil
           }
-          return ($0.CborValue, value)
+          return ($0.encoded, value)
         case .none:
           return nil
         }
@@ -430,8 +430,8 @@ extension _SpecialTreatmentEncoder {
     .literal(value ? [0xF5] : [0xF4])
   }
 
-  fileprivate func wrapStringKey(_ value: String, for key: CodingKey?) throws -> CborStringKey {
-    try CborStringKey(stringValue: value, CborValue: wrapString(value, for: key))
+  fileprivate func wrapStringKey(_ value: String, for key: CodingKey?) throws -> CborMapKey {
+    try CborMapKey(identity: .string(value), encoded: wrapString(value, for: key))
   }
 
   fileprivate func wrapString(_ value: String, for _: CodingKey?) throws -> CborEncodedValue {
