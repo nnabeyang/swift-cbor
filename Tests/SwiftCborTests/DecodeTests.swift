@@ -85,7 +85,7 @@ final class DecodeTests: XCTestCase {
       "こんにちは、世界")
     XCTAssertEqual(
       try decoder.decode(
-        String.self, from: Data(hex: "7fe38193e38293e381abe381a1e381afe38081e4b896e7958cff")),
+        String.self, from: Data(hex: "7f6fe38193e38293e381abe381a1e381af69e38081e4b896e7958cff")),
       "こんにちは、世界")
   }
 
@@ -98,7 +98,8 @@ final class DecodeTests: XCTestCase {
       Data("abcdefghijklmnopqrstuvwxyz".utf8))
     XCTAssertEqual(
       try decoder.decode(
-        Data.self, from: Data(hex: "5f6162636465666768696a6b6c6d6e6f707172737475767778797aff")),
+        Data.self,
+        from: Data(hex: "5f4d6162636465666768696a6b6c6d4d6e6f707172737475767778797aff")),
       Data("abcdefghijklmnopqrstuvwxyz".utf8))
     XCTAssertEqual(
       try decoder.decode(

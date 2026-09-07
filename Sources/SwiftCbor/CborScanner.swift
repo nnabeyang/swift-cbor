@@ -69,11 +69,11 @@ class CborScanner {
   }
 
   private func scanBinaryString(additional: UInt8) throws -> CborValue {
-    try .literal(.bin(scanSequence(additional: additional)))
+    try .literal(.bin(scanSequence(additional: additional, chunkKind: .bin)))
   }
 
   private func scanString(additional: UInt8) throws -> CborValue {
-    let bytes = try scanSequence(additional: additional)
+    let bytes = try scanSequence(additional: additional, chunkKind: .str)
     if options.contains(.validUTF8Only), String(data: bytes, encoding: .utf8) == nil {
       throw DecodingError.dataCorrupted(
         .init(
@@ -84,29 +84,64 @@ class CborScanner {
     return .literal(.str(bytes))
   }
 
-  private func scanSequence(additional c: UInt8) throws -> Data {
+  /// The major type an indefinite-length string's chunks must use, per RFC 8949 Section 3.2.3.
+  private enum StringChunkKind {
+    case bin
+    case str
+
+    var description: String {
+      switch self {
+      case .bin: "byte string"
+      case .str: "text string"
+      }
+    }
+  }
+
+  private func scanSequence(additional c: UInt8, chunkKind: StringChunkKind) throws -> Data {
     if let n = try getLength(c: c) {
       guard n <= limits.maximumStringBytes else {
-        throw DecodingError.dataCorrupted(
-          .init(codingPath: [], debugDescription: "CBOR string size limit exceeded."))
+        throw stringSizeLimitError()
       }
       return try read(n)
-    } else {
-      try rejectIndefiniteLengthItem("byte or text string")
-      let start = off
-      while off < data.endIndex, data[off] != 0xFF {
-        guard off - start < limits.maximumStringBytes else {
-          throw DecodingError.dataCorrupted(
-            .init(codingPath: [], debugDescription: "CBOR string size limit exceeded."))
-        }
-        off += 1
-      }
-      guard off < data.endIndex else {
+    }
+
+    try rejectIndefiniteLengthItem("byte or text string")
+    var bytes = Data()
+    while true {
+      let additional: UInt8
+      switch (readOpCode(), chunkKind) {
+      case (.float(0x1F), _):
+        return bytes
+      case (.bin(let a), .bin), (.str(let a), .str):
+        additional = a
+      case (.end, _):
         throw DecodingError.dataCorrupted(
           .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+      default:
+        throw invalidStringChunkError(chunkKind)
       }
-      return data[start..<off]
+      guard let n = try getLength(c: additional) else {
+        throw invalidStringChunkError(chunkKind)
+      }
+      guard n <= limits.maximumStringBytes - bytes.count else {
+        throw stringSizeLimitError()
+      }
+      bytes.append(try read(n))
     }
+  }
+
+  private func stringSizeLimitError() -> DecodingError {
+    DecodingError.dataCorrupted(
+      .init(codingPath: [], debugDescription: "CBOR string size limit exceeded."))
+  }
+
+  private func invalidStringChunkError(_ chunkKind: StringChunkKind) -> DecodingError {
+    DecodingError.dataCorrupted(
+      .init(
+        codingPath: [],
+        debugDescription:
+          "An indefinite-length \(chunkKind.description) may only contain definite-length \(chunkKind.description) chunks."
+      ))
   }
 
   private func scanFloat(additional c: UInt8) throws -> CborValue {
