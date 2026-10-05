@@ -188,6 +188,14 @@ class CborScanner {
       return .literal(.undefined)
     case 0x18:
       let value: UInt8 = bigEndianFixedWidthInt(try read(1 << 0), as: UInt8.self)
+      // RFC 8949 Section 3.3: simple values 0-31 must use the one-byte encoding.
+      guard value >= 32 else {
+        throw DecodingError.dataCorrupted(
+          .init(
+            codingPath: [],
+            debugDescription: "CBOR simple value \(value) must not use the two-byte encoding."
+          ))
+      }
       if options.contains(.basicSimpleValuesOnly) { throw unsupportedSimpleValue(value) }
       return .literal(.simple(value))
     case 0x19:
