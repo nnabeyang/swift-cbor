@@ -22,8 +22,7 @@ class CborScanner {
 
   private func read(_ n: Int) throws -> Data {
     guard n >= 0, off <= data.endIndex, n <= data.endIndex - off else {
-      throw DecodingError.dataCorrupted(
-        .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+      throw unexpectedEndError()
     }
     defer {
       off += n
@@ -58,6 +57,32 @@ class CborScanner {
     case .end:
       .none
     }
+  }
+
+  /// Scans a data item where one is required.
+  ///
+  /// A break code is only well-formed as the terminator of an indefinite-length item
+  /// (RFC 8949 Section 3.2.1), so it is rejected here along with the end of input.
+  func scanDataItem() throws -> CborValue {
+    let value = try scan()
+    switch value {
+    case .none:
+      throw unexpectedEndError()
+    case .literal(.break):
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: [],
+          debugDescription:
+            "A break code is only permitted as the terminator of an indefinite-length item."
+        ))
+    default:
+      return value
+    }
+  }
+
+  private func unexpectedEndError() -> DecodingError {
+    DecodingError.dataCorrupted(
+      .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
   }
 
   private func scanUInt(additional c: UInt8) throws -> CborValue {
@@ -115,8 +140,7 @@ class CborScanner {
       case (.bin(let a), .bin), (.str(let a), .str):
         additional = a
       case (.end, _):
-        throw DecodingError.dataCorrupted(
-          .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+        throw unexpectedEndError()
       default:
         throw invalidStringChunkError(chunkKind)
       }
@@ -199,7 +223,8 @@ class CborScanner {
       }
       return .literal(.break)
     default:
-      return .none
+      throw DecodingError.dataCorrupted(
+        .init(codingPath: [], debugDescription: "Invalid CBOR additional information."))
     }
   }
 
@@ -236,7 +261,7 @@ class CborScanner {
           debugDescription: "CBOR tag \(tag) is not in the allowed tag set."
         ))
     }
-    return try .tagged(tag: .uint(tag), value: scan())
+    return try .tagged(tag: .uint(tag), value: scanDataItem())
   }
 
   private func scanArray(additional c: UInt8) throws -> CborValue {
@@ -245,7 +270,7 @@ class CborScanner {
       try requireContainerElementLimit(n)
       a.reserveCapacity(n)
       for _ in 0..<n {
-        try a.append(scan())
+        try a.append(scanDataItem())
       }
     } else {
       try rejectIndefiniteLengthItem("array")
@@ -255,8 +280,7 @@ class CborScanner {
           break
         }
         if case .none = e {
-          throw DecodingError.dataCorrupted(
-            .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+          throw unexpectedEndError()
         }
         try requireContainerElementLimit(a.count + 1)
         a.append(e)
@@ -273,7 +297,7 @@ class CborScanner {
       a.reserveCapacity(n)
       for _ in 0..<n {
         let keyStart = off
-        let key = try scan()
+        let key = try scanDataItem()
         try requireLexicographicallySortedMapKey(
           data[keyStart..<off], after: &previousKeyEncoding)
         if options.contains(.stringMapKeysOnly), !key.isTextString {
@@ -284,7 +308,7 @@ class CborScanner {
             ))
         }
         a.append(key)
-        try a.append(scan())
+        try a.append(scanDataItem())
       }
     } else {
       try rejectIndefiniteLengthItem("map")
@@ -295,8 +319,7 @@ class CborScanner {
           break
         }
         if case .none = k {
-          throw DecodingError.dataCorrupted(
-            .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
+          throw unexpectedEndError()
         }
         try requireContainerElementLimit(a.count / 2 + 1)
         try requireLexicographicallySortedMapKey(
@@ -308,15 +331,7 @@ class CborScanner {
               debugDescription: "CBOR map keys must be text strings."
             ))
         }
-        let v = try scan()
-        if case .none = v {
-          throw DecodingError.dataCorrupted(
-            .init(codingPath: [], debugDescription: "Unexpected end of CBOR input."))
-        }
-        if case .literal(.break) = v {
-          throw DecodingError.dataCorrupted(
-            .init(codingPath: [], debugDescription: "CBOR map is missing a value."))
-        }
+        let v = try scanDataItem()
         a.append(k)
         a.append(v)
       }

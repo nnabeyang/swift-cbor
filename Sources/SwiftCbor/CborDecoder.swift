@@ -63,7 +63,7 @@ open class CborDecoder {
     }
     let scanner = CborScanner(
       data: data, options: options, allowedTags: allowedTags, limits: limits)
-    let value = try scanner.scan()
+    let value = try scanner.scanDataItem()
     let decoder: _CborDecoder = .init(from: value, userInfo: userInfo)
     do {
       return (try decoder.unwrap(as: T.self), scanner.consumedByteCount)
