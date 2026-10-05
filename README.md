@@ -64,7 +64,7 @@ let package = Package(
     // name, platforms, products, etc.
     dependencies: [
         // other dependencies
-        .package(url: "https://github.com/nnabeyang/swift-cbor", from: "0.2.0"),
+        .package(url: "https://github.com/nnabeyang/swift-cbor", from: "0.3.0"),
     ],
     targets: [
         .executableTarget(name: "<executable-target-name>", dependencies: [
